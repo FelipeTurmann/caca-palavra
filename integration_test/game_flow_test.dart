@@ -5,6 +5,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:caca_palavra/app.dart';
 import 'package:caca_palavra/features/game/data/game_data.dart';
 import 'package:caca_palavra/features/game/domain/game_engine.dart';
+import 'package:caca_palavra/features/game/presentation/widgets/explorer_progress.dart';
+import 'package:caca_palavra/features/game/presentation/widgets/word_slots.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -38,9 +40,19 @@ void main() {
 
     await drag(data.levels.first, 'TOGA');
     expect(find.text('Extras: 1'), findsOneWidget);
+    expect(find.text('Meta 1/1'), findsOneWidget);
+    int visibleHints() => tester
+        .widgetList<WordSlots>(find.byType(WordSlots))
+        .fold(0, (total, row) => total + row.revealed.length);
+    expect(visibleHints(), 1);
+    expect(find.text('0 de 3 palavras'), findsOneWidget);
+    await drag(data.levels.first, 'TOGA');
+    expect(visibleHints(), 1);
+    expect(find.text('Extras: 1'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('extras')));
     await tester.pumpAndSettle();
     expect(find.text('TOGA'), findsOneWidget);
+    expect(find.byType(ExplorerBadge), findsOneWidget);
     await tester.tap(find.text('Fechar'));
     await tester.pumpAndSettle();
 
@@ -56,6 +68,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 450));
       await tester.pumpAndSettle();
       expect(find.text('Nível ${level.id} concluído.'), findsOneWidget);
+      if (level.id == 1) {
+        expect(find.text('TOGA'), findsOneWidget);
+        expect(find.byType(ExplorerBadge), findsOneWidget);
+      } else {
+        expect(find.byType(ExplorerBadge), findsNothing);
+      }
       if (level.id == 10) {
         expect(
           find.text('Você concluiu os 10 níveis de teste.'),
@@ -65,6 +83,13 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('next-level')));
       await tester.pumpAndSettle();
       expect(find.text('Extras: 0'), findsOneWidget);
+      expect(visibleHints(), 0);
+      expect(
+        find.text(
+          'Meta 0/${level.id == 10 ? 1 : data.levels[level.id].extraGoal}',
+        ),
+        findsOneWidget,
+      );
     }
     expect(find.text('Nível 1'), findsOneWidget);
     expect(find.text('0 de 3 palavras'), findsOneWidget);

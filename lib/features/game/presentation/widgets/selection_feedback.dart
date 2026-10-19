@@ -6,8 +6,13 @@ import '../../domain/game_engine.dart';
 import '../game_controller.dart';
 
 class SelectionFeedback extends StatelessWidget {
-  const SelectionFeedback({super.key, required this.controller});
+  const SelectionFeedback({
+    super.key,
+    required this.controller,
+    this.extraIconKey,
+  });
   final GameController controller;
+  final GlobalKey? extraIconKey;
 
   static String message(SubmissionResult? result) => switch (result?.kind) {
     SubmissionKind.tooShort => 'Use pelo menos 3 letras.',
@@ -27,10 +32,13 @@ class SelectionFeedback extends StatelessWidget {
         result?.kind == SubmissionKind.tooShort;
     final success = result?.kind == SubmissionKind.targetFound;
     final extra = result?.kind == SubmissionKind.extraFound;
+    final celebrating = controller.celebratingExplorer;
     final scale = MediaQuery.textScalerOf(context).scale(1);
     final reduced = MediaQuery.disableAnimationsOf(context);
     return SizedBox(
-      height: 64 * math.max(1, scale * 0.85),
+      // Reserve wrapped feedback and its extra-reveal caption at larger text
+      // sizes, keeping the same space for every message within this layout.
+      height: 64 * math.max(1, 1 + (scale - 1) * 2),
       child: Center(
         child: controller.dragging
             ? Container(
@@ -62,26 +70,33 @@ class SelectionFeedback extends StatelessWidget {
             : Semantics(
                 liveRegion: true,
                 child: TweenAnimationBuilder<double>(
-                  key: ValueKey(controller.feedbackSerial),
+                  key: ValueKey('${controller.feedbackSerial}-$celebrating'),
                   tween: Tween(begin: 0, end: 1),
                   duration: reduced ? Duration.zero : GameTiming.pulse,
-                  builder: (context, value, child) => Transform.translate(
-                    offset: Offset(
-                      error
-                          ? math.sin(value * math.pi * 6) * 4 * (1 - value)
-                          : 0,
-                      0,
+                  builder: (context, value, child) => Transform.scale(
+                    scale: celebrating
+                        ? 1 + math.sin(value * math.pi) * 0.04
+                        : 1,
+                    child: Transform.translate(
+                      offset: Offset(
+                        error
+                            ? math.sin(value * math.pi * 6) * 4 * (1 - value)
+                            : 0,
+                        0,
+                      ),
+                      child: child,
                     ),
-                    child: child,
                   ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (result != null) ...[
+                        if (result != null || celebrating) ...[
                           Icon(
-                            error
+                            celebrating
+                                ? Icons.workspace_premium_rounded
+                                : error
                                 ? Icons.info_outline_rounded
                                 : extra
                                 ? Icons.star_rounded
@@ -89,20 +104,41 @@ class SelectionFeedback extends StatelessWidget {
                                 ? Icons.check_circle_rounded
                                 : Icons.refresh_rounded,
                             size: 19,
-                            color: extra
+                            key: extra && !celebrating ? extraIconKey : null,
+                            color: extra || celebrating
                                 ? const Color(0xFF8A5A00)
                                 : GameTheme.teal,
                           ),
                           const SizedBox(width: 7),
                         ],
                         Flexible(
-                          child: Text(
-                            message(result),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                celebrating
+                                    ? 'Explorador conquistado!'
+                                    : message(result),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (extra && !celebrating)
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    result!.revealedLetter != null
+                                        ? 'Uma letra revelada!'
+                                        : 'Extras continuam contando.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF795100),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],

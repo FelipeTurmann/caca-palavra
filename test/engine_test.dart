@@ -18,6 +18,90 @@ class FixedRandom implements Random {
 }
 
 void main() {
+  test(
+    'explorer goals are small, editable and achievable from unique extras',
+    () {
+      final data = loadData();
+      expect(data.levels.map((level) => level.extraGoal), [
+        1,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+      ]);
+      for (final level in data.levels) {
+        final targets = level.words.map((word) => word.key).toSet();
+        final extras = data.lexicon.keys.where(
+          (key) => !targets.contains(key) && level.canForm(key),
+        );
+        expect(level.extraGoal, lessThanOrEqualTo(extras.length));
+      }
+      final levelsJson = File('assets/data/levels.json').readAsStringSync();
+      final lexiconJson = File(
+        'assets/data/lexicon_pt_br.json',
+      ).readAsStringSync();
+      for (final invalidGoal in [0, -1, 2, 100]) {
+        final root = jsonDecode(levelsJson) as Map<String, dynamic>;
+        root['levels'][0]['extraGoal'] = invalidGoal;
+        expect(
+          () => GameData.parse(jsonEncode(root), lexiconJson),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              contains('meta de extras'),
+            ),
+          ),
+        );
+      }
+    },
+  );
+
+  test(
+    'explorer unlocks once, repeats do not advance, more extras keep counting',
+    () {
+      final events = <GameEvent>[];
+      final engine = makeEngine(onEvent: events.add)..startLevel(5);
+      expect(engine.state.explorerUnlocked, isFalse);
+      expect(submitWord(engine, 'APTO').explorerUnlocked, isFalse);
+      expect(engine.state.explorerProgress, 1);
+      submitWord(engine, 'ARO');
+      expect(submitWord(engine, 'ATO').explorerUnlocked, isTrue);
+      expect(engine.state.explorerUnlocked, isTrue);
+      expect(submitWord(engine, 'ATO').explorerUnlocked, isFalse);
+      expect(submitWord(engine, 'OPTA').explorerUnlocked, isFalse);
+      expect(engine.state.extras.length, 4);
+      expect(engine.state.explorerProgress, 3);
+      expect(engine.state.targets, isEmpty);
+      expect(engine.state.phase, RoundPhase.playing);
+      engine.shuffle();
+      expect(engine.state.explorerUnlocked, isTrue);
+      expect(
+        events
+            .where((event) => event.kind == GameEventKind.explorerUnlocked)
+            .length,
+        1,
+      );
+      engine.startLevel(2);
+      expect(engine.state.explorerProgress, 0);
+      expect(engine.state.explorerUnlocked, isFalse);
+    },
+  );
+
+  test('targets alone still complete a round without an explorer badge', () {
+    final engine = makeEngine();
+    for (final word in engine.state.level.words) {
+      submitWord(engine, word.key);
+    }
+    expect(engine.state.phase, RoundPhase.completing);
+    expect(engine.state.explorerUnlocked, isFalse);
+    expect(engine.finishCompletion(engine.state.session), isTrue);
+  });
   test('ten levels and 61 lexicon entries pass all data checks', () {
     final data = loadData();
     expect(

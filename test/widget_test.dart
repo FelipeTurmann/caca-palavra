@@ -6,6 +6,8 @@ import 'package:caca_palavra/features/game/domain/game_engine.dart';
 import 'package:caca_palavra/features/game/presentation/game_controller.dart';
 import 'package:caca_palavra/features/game/presentation/game_screen.dart';
 import 'package:caca_palavra/features/game/presentation/widgets/letter_wheel.dart';
+import 'package:caca_palavra/features/game/presentation/widgets/explorer_progress.dart';
+import 'package:caca_palavra/features/game/presentation/widgets/word_slots.dart';
 import 'helpers.dart';
 
 Future<GameController> mount(
@@ -13,6 +15,7 @@ Future<GameController> mount(
   int level = 1,
   Size size = const Size(412, 915),
   double textScale = 1,
+  bool reduceMotion = false,
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
@@ -24,9 +27,10 @@ Future<GameController> mount(
     MaterialApp(
       theme: GameTheme.theme,
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+          disableAnimations: reduceMotion,
+        ),
         child: child!,
       ),
       home: GameScreen(controller: controller),
@@ -60,6 +64,256 @@ ConnectionPainter painter(WidgetTester tester) => tester
     .single;
 
 void main() {
+  testWidgets(
+    'extra reveals one golden cell, repeats do not reveal and target still needs a drag',
+    (tester) async {
+      final c = await mount(tester);
+      await dragWord(tester, c, 'TOGA');
+      final hint = c.feedback!.revealedLetter!;
+      expect(find.text('Uma letra revelada!'), findsOneWidget);
+      expect(find.text('0 de 3 palavras'), findsOneWidget);
+      final slot = find.byKey(ValueKey('slot-${hint.targetKey}-${hint.index}'));
+      expect(
+        find.descendant(of: slot, matching: find.text(hint.letter)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: slot, matching: find.byIcon(Icons.star_rounded)),
+        findsOneWidget,
+      );
+      final row = tester
+          .widgetList<WordSlots>(find.byType(WordSlots))
+          .singleWhere((row) => row.word.key == hint.targetKey);
+      expect(row.found, isFalse);
+      expect(row.revealed, {hint.index});
+      final previous = c.state.revealedLetters;
+      await dragWord(tester, c, 'TOGA');
+      expect(c.feedback!.revealedLetter, isNull);
+      expect(c.state.revealedLetters, previous);
+      expect(find.text('Uma letra revelada!'), findsNothing);
+      await dragWord(tester, c, hint.targetKey);
+      expect(c.state.targets, {hint.targetKey});
+      final solved = tester
+          .widgetList<WordSlots>(find.byType(WordSlots))
+          .singleWhere((row) => row.word.key == hint.targetKey);
+      expect(solved.found, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'accented hinted letters occupy single cells in both Unicode forms',
+    (tester) async {
+      for (final display in ['AÇÃO', 'AC\u0327A\u0303O']) {
+        final word = WordEntry(display);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: WordSlots(
+                word: word,
+                found: false,
+                pulse: 1,
+                revealed: const {1, 2},
+              ),
+            ),
+          ),
+        );
+        for (final index in [1, 2]) {
+          expect(
+            find.descendant(
+              of: find.byKey(ValueKey('slot-ACAO-$index')),
+              matching: find.text(word.letters[index]),
+            ),
+            findsOneWidget,
+          );
+        }
+        expect(find.byKey(const ValueKey('slot-ACAO-4')), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('slot-ACAO-0')),
+            matching: find.byType(Text),
+          ),
+          findsNothing,
+        );
+        expect(tester.takeException(), isNull);
+      }
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'several quick extras each reveal one letter while keeping the explorer goal',
+    (tester) async {
+      final c = await mount(tester, level: 5);
+      for (final extra in ['APTO', 'ARO', 'ATO', 'OPTA']) {
+        await dragWord(tester, c, extra);
+      }
+      expect(c.state.extras.length, 4);
+      expect(
+        c.state.revealedLetters.values.fold(
+          0,
+          (sum, indices) => sum + indices.length,
+        ),
+        4,
+      );
+      expect(c.state.explorerUnlocked, isTrue);
+      expect(c.state.explorerProgress, 3);
+      expect(c.state.targets, isEmpty);
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'extra flies to counter, celebrates once and repeats do not collect',
+    (tester) async {
+      final c = await mount(tester);
+      expect(find.text('Meta 0/1'), findsOneWidget);
+      await dragWord(tester, c, 'TOGA');
+      expect(find.text('Palavra extra: TOGA'), findsOneWidget);
+      expect(find.text('Extras: 1'), findsOneWidget);
+      expect(find.text('Meta 1/1'), findsOneWidget);
+      expect(c.discoveries.length, 1);
+      final flight = find.byKey(
+        ValueKey('extra-flight-${c.state.session}-${c.discoveries.single.id}'),
+      );
+      expect(flight, findsOneWidget);
+      await tester.pump();
+      final initial = tester.getCenter(flight);
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(tester.getCenter(flight).dy, lessThan(initial.dy));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(c.discoveries, isEmpty);
+      expect(c.collectedSerial, 1);
+      expect(find.text('Explorador conquistado!'), findsOneWidget);
+      await dragWord(tester, c, 'TOGA');
+      expect(
+        find.text('Essa palavra extra já foi encontrada.'),
+        findsOneWidget,
+      );
+      expect(c.discoveries, isEmpty);
+      expect(c.collectedSerial, 1);
+      expect(c.celebratingExplorer, isFalse);
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
+
+  testWidgets(
+    'collection does not block a new drag or replace newer feedback',
+    (tester) async {
+      final c = await mount(tester);
+      await dragWord(tester, c, 'TOGA');
+      final ids = idsFor(c.engine, 'GATO');
+      final g = await tester.startGesture(center(tester, ids.first));
+      await tester.pump();
+      expect(c.dragging, isTrue);
+      await tester.pump(const Duration(milliseconds: 850));
+      expect(c.preview, 'G');
+      expect(c.celebratingExplorer, isFalse);
+      for (final id in ids.skip(1)) {
+        await g.moveTo(center(tester, id));
+      }
+      await g.up();
+      await tester.pump();
+      expect(find.text('Muito bem!'), findsOneWidget);
+      expect(c.state.targets, {'GATO'});
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
+
+  testWidgets(
+    'completion lists extra discoveries and badge; next resets the goal',
+    (tester) async {
+      final c = await mount(tester);
+      await dragWord(tester, c, 'TOGA');
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(tester.takeException(), isNull);
+      for (final word in c.state.level.words) {
+        await dragWord(tester, c, word.key);
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Suas descobertas'), findsOneWidget);
+      expect(
+        find.text('3 palavras obrigatórias\n1 palavra extra descoberta'),
+        findsOneWidget,
+      );
+      expect(find.text('TOGA'), findsOneWidget);
+      expect(find.byType(ExplorerBadge), findsOneWidget);
+      expect(c.discoveries, isEmpty);
+      await tester.tap(find.byKey(const ValueKey('next-level')));
+      await tester.pumpAndSettle();
+      expect(find.text('Meta 0/2'), findsOneWidget);
+      expect(c.state.explorerUnlocked, isFalse);
+      expect(c.celebratingExplorer, isFalse);
+      expect(c.collectedSerial, 0);
+      for (final word in c.state.level.words) {
+        await dragWord(tester, c, word.key);
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(ExplorerBadge), findsNothing);
+      expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
+    },
+  );
+
+  testWidgets('reduced motion records extra and badge without a flying star', (
+    tester,
+  ) async {
+    final c = await mount(tester, reduceMotion: true);
+    await dragWord(tester, c, 'TOGA');
+    await tester.pump();
+    expect(c.discoveries, isEmpty);
+    expect(c.collectedSerial, 1);
+    expect(c.state.explorerUnlocked, isTrue);
+    expect(find.text('Explorador conquistado!'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets(
+    'extras sheet and completion remain scrollable with large text on small screen',
+    (tester) async {
+      final c = await mount(tester, size: const Size(320, 568), textScale: 2);
+      await tester.tap(find.byKey(const ValueKey('extras')));
+      await tester.pumpAndSettle();
+      expect(find.text('Palavras extras'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Fechar'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('letter-wheel')));
+      await dragWord(tester, c, 'TOGA');
+      for (final word in c.state.level.words) {
+        await dragWord(tester, c, word.key);
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.ensureVisible(find.byKey(const ValueKey('next-level')));
+      expect(find.byType(ExplorerBadge), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'resize and detach clear collection callbacks but preserve earned badge',
+    (tester) async {
+      final c = await mount(tester);
+      await dragWord(tester, c, 'TOGA');
+      expect(c.discoveries, isNotEmpty);
+      tester.view.physicalSize = const Size(640, 480);
+      await tester.pump();
+      expect(c.discoveries, isEmpty);
+      expect(c.state.explorerUnlocked, isTrue);
+      expect(
+        c.state.revealedLetters.values.fold(
+          0,
+          (sum, indices) => sum + indices.length,
+        ),
+        1,
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 3));
+      expect(c.celebratingExplorer, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('production entry loads assets and opens level one directly', (
     tester,
   ) async {
@@ -369,6 +623,7 @@ void main() {
         expect(c.state.level.id, level == 10 ? 1 : level + 1);
         expect(c.state.targets, isEmpty);
         expect(c.state.extras, isEmpty);
+        expect(c.state.revealedLetters, isEmpty);
         expect(c.preview, isEmpty);
         expect(c.feedback, isNull);
         expect(c.state.phase, RoundPhase.playing);

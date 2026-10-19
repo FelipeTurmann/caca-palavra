@@ -11,6 +11,21 @@ abstract final class GameTiming {
   static const completion = Duration(milliseconds: 350);
   static const shuffle = Duration(milliseconds: 200);
   static const pulse = Duration(milliseconds: 300);
+  static const extraCollect = Duration(milliseconds: 800);
+  static const explorerCelebration = Duration(milliseconds: 1800);
+}
+
+class ExtraDiscovery {
+  const ExtraDiscovery({
+    required this.id,
+    required this.session,
+    required this.word,
+    required this.explorerUnlocked,
+  });
+  final int id;
+  final int session;
+  final WordEntry word;
+  final bool explorerUnlocked;
 }
 
 class GameController extends ChangeNotifier {
@@ -21,6 +36,12 @@ class GameController extends ChangeNotifier {
   Timer? _feedbackTimer;
   Timer? _completionTimer;
   Timer? _shuffleTimer;
+  Timer? _explorerTimer;
+  final List<ExtraDiscovery> _discoveries = [];
+  int _discoverySerial = 0;
+  int collectedSerial = 0;
+  bool celebratingExplorer = false;
+  List<ExtraDiscovery> get discoveries => List.unmodifiable(_discoveries);
   bool _disposed = false;
   bool shuffling = false;
   SubmissionResult? feedback;
@@ -47,6 +68,8 @@ class GameController extends ChangeNotifier {
   void down(int pointer, Offset position) {
     if (!interactive || _geometry == null) return;
     if (gesture.down(pointer, position, _geometry!)) {
+      _explorerTimer?.cancel();
+      celebratingExplorer = false;
       _feedbackTimer?.cancel();
       feedback = null;
       notifyListeners();
@@ -65,6 +88,16 @@ class GameController extends ChangeNotifier {
     final ids = gesture.up(pointer);
     if (ids == null) return;
     final result = engine.submit(ids, session: state.session);
+    if (result.kind == SubmissionKind.extraFound) {
+      _discoveries.add(
+        ExtraDiscovery(
+          id: ++_discoverySerial,
+          session: state.session,
+          word: result.word!,
+          explorerUnlocked: result.explorerUnlocked,
+        ),
+      );
+    }
     feedback = result.kind == SubmissionKind.ignored ? null : result;
     feedbackSerial++;
     _feedbackTimer?.cancel();
@@ -78,7 +111,10 @@ class GameController extends ChangeNotifier {
       final session = state.session;
       _completionTimer?.cancel();
       _completionTimer = Timer(GameTiming.completion, () {
-        if (engine.finishCompletion(session)) refresh();
+        if (engine.finishCompletion(session)) {
+          clearCollectionEffects(notify: false);
+          refresh();
+        }
       });
     }
     notifyListeners();
@@ -86,6 +122,34 @@ class GameController extends ChangeNotifier {
 
   void cancelPointer(int pointer) {
     if (gesture.pointer == pointer) cancelGesture();
+  }
+
+  void finishDiscovery(ExtraDiscovery discovery) {
+    if (_disposed ||
+        discovery.session != state.session ||
+        !_discoveries.remove(discovery)) {
+      return;
+    }
+    collectedSerial++;
+    if (discovery.explorerUnlocked &&
+        !dragging &&
+        feedback?.kind == SubmissionKind.extraFound &&
+        feedback?.word?.key == discovery.word.key) {
+      celebratingExplorer = true;
+      _explorerTimer?.cancel();
+      _explorerTimer = Timer(GameTiming.explorerCelebration, () {
+        celebratingExplorer = false;
+        refresh();
+      });
+    }
+    refresh();
+  }
+
+  void clearCollectionEffects({bool notify = true}) {
+    _discoveries.clear();
+    _explorerTimer?.cancel();
+    celebratingExplorer = false;
+    if (notify) refresh();
   }
 
   void cancelGesture({bool notify = true}) {
@@ -117,6 +181,8 @@ class GameController extends ChangeNotifier {
     _geometry = null;
     feedback = null;
     shuffling = false;
+    clearCollectionEffects(notify: false);
+    collectedSerial = 0;
     engine.startLevel(next);
     notifyListeners();
   }
@@ -125,12 +191,14 @@ class GameController extends ChangeNotifier {
     _cancelTimers();
     gesture.cancel();
     shuffling = false;
+    clearCollectionEffects(notify: false);
   }
 
   void _cancelTimers() {
     _feedbackTimer?.cancel();
     _completionTimer?.cancel();
     _shuffleTimer?.cancel();
+    _explorerTimer?.cancel();
   }
 
   @override
@@ -138,6 +206,7 @@ class GameController extends ChangeNotifier {
     _disposed = true;
     _cancelTimers();
     gesture.cancel();
+    _discoveries.clear();
     super.dispose();
   }
 }

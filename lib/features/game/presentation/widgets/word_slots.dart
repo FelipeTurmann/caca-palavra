@@ -12,10 +12,12 @@ class WordSlots extends StatelessWidget {
     required this.word,
     required this.found,
     required this.pulse,
+    this.revealed = const {},
   });
   final WordEntry word;
   final bool found;
   final int pulse;
+  final Set<int> revealed;
 
   @override
   Widget build(BuildContext context) {
@@ -23,14 +25,15 @@ class WordSlots extends StatelessWidget {
     return Semantics(
       label: found
           ? 'Palavra encontrada: ${word.display}'
-          : 'Palavra de ${word.letters.length} letras',
+          : 'Palavra de ${word.letters.length} letras${revealed.isEmpty ? '' : '. Letras reveladas: ${[for (var index = 0; index < word.letters.length; index++)
+                    if (revealed.contains(index)) '${index + 1}: ${word.letters[index]}'].join(', ')}'}',
       child: ExcludeSemantics(
         child: TweenAnimationBuilder<double>(
           key: ValueKey('${word.key}-$pulse'),
           tween: Tween(begin: 0, end: 1),
           duration: reduced ? Duration.zero : GameTiming.pulse,
           builder: (context, value, child) => Transform.scale(
-            scale: found && pulse > 0
+            scale: (found || revealed.isNotEmpty) && pulse > 0
                 ? 1 + math.sin(math.pi * value) * 0.045
                 : 1,
             child: child,
@@ -60,11 +63,15 @@ class WordSlots extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: found
                               ? GameTheme.teal
+                              : revealed.contains(index)
+                              ? const Color(0xFFFFEDB7)
                               : Colors.white.withValues(alpha: 0.45),
                           borderRadius: BorderRadius.circular(9),
                           border: Border.all(
                             color: found
                                 ? GameTheme.lightTeal
+                                : revealed.contains(index)
+                                ? GameTheme.gold
                                 : GameTheme.slotBorder,
                             width: 1.5,
                           ),
@@ -78,18 +85,37 @@ class WordSlots extends StatelessWidget {
                                 ]
                               : null,
                         ),
-                        child: found
-                            ? FittedBox(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Text(
-                                    word.letters[index],
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 27,
-                                      fontWeight: FontWeight.w800,
+                        child: found || revealed.contains(index)
+                            ? SizedBox.expand(
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    FittedBox(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Text(
+                                          word.letters[index],
+                                          style: TextStyle(
+                                            color: found
+                                                ? Colors.white
+                                                : const Color(0xFF795100),
+                                            fontSize: 27,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    if (!found)
+                                      const Positioned(
+                                        right: 3,
+                                        top: 3,
+                                        child: Icon(
+                                          Icons.star_rounded,
+                                          size: 10,
+                                          color: Color(0xFF795100),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               )
                             : null,

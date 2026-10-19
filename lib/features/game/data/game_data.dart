@@ -40,6 +40,7 @@ class GameData {
           difficulty: raw['difficulty'] as String,
           letters: List<String>.from(raw['letters'] as List),
           words: (raw['words'] as List).map(_word).toList(),
+          extraGoal: raw['extraGoal'] as int? ?? 1,
         );
         validateLevel(level, lexicon);
         if (level.id != levels.length + 1) {
@@ -108,6 +109,14 @@ class GameData {
           invalid('fichas insuficientes para ${word.display}.');
         }
       }
+    }
+    final availableExtras = lexicon.keys
+        .where((key) => !seen.contains(key) && level.canForm(key))
+        .length;
+    if (level.extraGoal < 1 || level.extraGoal > availableExtras) {
+      invalid(
+        'meta de extras ${level.extraGoal} inválida: há $availableExtras extras possíveis no léxico.',
+      );
     }
   }
 }

@@ -5,6 +5,7 @@
   "levels": [
     {
       "id": 1,
+      "extraGoal": 1,
       "difficulty": "introducao",
       "letters": [
         "G",
@@ -26,6 +27,7 @@
     },
     {
       "id": 2,
+      "extraGoal": 2,
       "difficulty": "introducao",
       "letters": [
         "P",
@@ -47,6 +49,7 @@
     },
     {
       "id": 3,
+      "extraGoal": 2,
       "difficulty": "introducao",
       "letters": [
         "B",
@@ -68,6 +71,7 @@
     },
     {
       "id": 4,
+      "extraGoal": 2,
       "difficulty": "facil",
       "letters": [
         "A",
@@ -89,6 +93,7 @@
     },
     {
       "id": 5,
+      "extraGoal": 3,
       "difficulty": "facil",
       "letters": [
         "P",
@@ -114,6 +119,7 @@
     },
     {
       "id": 6,
+      "extraGoal": 3,
       "difficulty": "facil",
       "letters": [
         "C",
@@ -139,6 +145,7 @@
     },
     {
       "id": 7,
+      "extraGoal": 3,
       "difficulty": "intermediario",
       "letters": [
         "C",
@@ -164,6 +171,7 @@
     },
     {
       "id": 8,
+      "extraGoal": 3,
       "difficulty": "intermediario",
       "letters": [
         "P",
@@ -189,6 +197,7 @@
     },
     {
       "id": 9,
+      "extraGoal": 3,
       "difficulty": "intermediario",
       "letters": [
         "P",
@@ -218,6 +227,7 @@
     },
     {
       "id": 10,
+      "extraGoal": 3,
       "difficulty": "intermediario",
       "letters": [
         "A",

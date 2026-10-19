@@ -21,6 +21,7 @@ class LevelDefinition {
     required this.difficulty,
     required List<String> letters,
     required List<WordEntry> words,
+    this.extraGoal = 1,
   }) : letters = List.unmodifiable(letters),
        words = List.unmodifiable(words),
        tiles = List.unmodifiable([
@@ -32,6 +33,12 @@ class LevelDefinition {
   final List<String> letters;
   final List<WordEntry> words;
   final List<LetterTile> tiles;
+  final int extraGoal;
+
+  bool canForm(String key) {
+    final remaining = letters.toList();
+    return key.split('').every(remaining.remove);
+  }
 }
 
 enum RoundPhase { playing, completing, completed }
@@ -47,10 +54,29 @@ enum SubmissionKind {
 }
 
 class SubmissionResult {
-  const SubmissionResult(this.kind, {this.word, this.completed = false});
+  const SubmissionResult(
+    this.kind, {
+    this.word,
+    this.completed = false,
+    this.explorerUnlocked = false,
+    this.revealedLetter,
+  });
   final SubmissionKind kind;
   final WordEntry? word;
   final bool completed;
+  final bool explorerUnlocked;
+  final LetterReveal? revealedLetter;
+}
+
+class LetterReveal {
+  const LetterReveal({
+    required this.targetKey,
+    required this.index,
+    required this.letter,
+  });
+  final String targetKey;
+  final int index;
+  final String letter;
 }
 
 class GameState {
@@ -60,21 +86,30 @@ class GameState {
     required List<String> order,
     Set<String> targets = const {},
     Map<String, WordEntry> extras = const {},
+    Map<String, Set<int>> revealedLetters = const {},
     this.phase = RoundPhase.playing,
   }) : order = List.unmodifiable(order),
        targets = Set.unmodifiable(targets),
-       extras = Map.unmodifiable(extras);
+       extras = Map.unmodifiable(extras),
+       revealedLetters = Map.unmodifiable({
+         for (final entry in revealedLetters.entries)
+           entry.key: Set<int>.unmodifiable(entry.value),
+       });
   final LevelDefinition level;
   final int session;
   final List<String> order;
   final Set<String> targets;
   final Map<String, WordEntry> extras;
+  final Map<String, Set<int>> revealedLetters;
   final RoundPhase phase;
+  int get explorerProgress => min(extras.length, level.extraGoal);
+  bool get explorerUnlocked => extras.length >= level.extraGoal;
 
   GameState copyWith({
     List<String>? order,
     Set<String>? targets,
     Map<String, WordEntry>? extras,
+    Map<String, Set<int>>? revealedLetters,
     RoundPhase? phase,
   }) => GameState(
     level: level,
@@ -82,12 +117,13 @@ class GameState {
     order: order ?? this.order,
     targets: targets ?? this.targets,
     extras: extras ?? this.extras,
+    revealedLetters: revealedLetters ?? this.revealedLetters,
     phase: phase ?? this.phase,
   );
 }
 
 /// Events are intentionally independent of UI and future reward integrations.
-enum GameEventKind { submission, completion }
+enum GameEventKind { submission, completion, explorerUnlocked }
 
 class GameEvent {
   const GameEvent(this.kind, this.session, this.levelId, [this.result]);
@@ -168,6 +204,9 @@ class GameEngine {
       result = SubmissionResult(
         repeated ? SubmissionKind.extraRepeated : SubmissionKind.extraFound,
         word: lexicon[key],
+        revealedLetter: repeated ? null : _revealRandomLetter(),
+        explorerUnlocked:
+            !repeated && state.extras.length == state.level.extraGoal,
       );
     } else {
       result = const SubmissionResult(SubmissionKind.unknownWord);
@@ -175,6 +214,16 @@ class GameEngine {
     onEvent?.call(
       GameEvent(GameEventKind.submission, session, state.level.id, result),
     );
+    if (result.explorerUnlocked) {
+      onEvent?.call(
+        GameEvent(
+          GameEventKind.explorerUnlocked,
+          session,
+          state.level.id,
+          result,
+        ),
+      );
+    }
     if (result.completed) {
       onEvent?.call(
         GameEvent(GameEventKind.completion, session, state.level.id),
@@ -189,6 +238,36 @@ class GameEngine {
     }
     _state = state.copyWith(phase: RoundPhase.completed);
     return true;
+  }
+
+  LetterReveal? _revealRandomLetter() {
+    final eligibleWords = state.level.words
+        .where(
+          (word) =>
+              !state.targets.contains(word.key) &&
+              (state.revealedLetters[word.key]?.length ?? 0) <
+                  word.letters.length - 1,
+        )
+        .toList();
+    if (eligibleWords.isEmpty) return null;
+    final word = eligibleWords[_random.nextInt(eligibleWords.length)];
+    final revealed = state.revealedLetters[word.key] ?? const <int>{};
+    final emptySlots = [
+      for (var index = 0; index < word.letters.length; index++)
+        if (!revealed.contains(index)) index,
+    ];
+    final index = emptySlots[_random.nextInt(emptySlots.length)];
+    _state = state.copyWith(
+      revealedLetters: {
+        ...state.revealedLetters,
+        word.key: {...revealed, index},
+      },
+    );
+    return LetterReveal(
+      targetKey: word.key,
+      index: index,
+      letter: word.letters[index],
+    );
   }
 
   bool shuffle({bool dragging = false}) {
