@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import '../domain/game_engine.dart';
+import '../application/game_session_coordinator.dart';
 import 'wheel_gesture.dart';
 
 abstract final class GameTiming {
@@ -29,7 +30,68 @@ class ExtraDiscovery {
 }
 
 class GameController extends ChangeNotifier {
-  GameController(this.engine);
+  GameController(this.engine, {this.coordinator, this.onHome});
+  final GameSessionCoordinator? coordinator;
+  final VoidCallback? onHome;
+  bool busy = false;
+  String? saveError;
+  LetterReveal? paidReveal;
+  int get balance => coordinator?.profile.balance ?? 0;
+  bool get explorerRewardGranted =>
+      coordinator?.profile.explorerRewardedLevels.contains(state.level.id) ??
+      false;
+  bool get lastLevel => state.level.id == engine.levels.last.id;
+  Future<void>? _active;
+  Future<T?> run<T>(Future<T> Function() action) async {
+    if (busy) return null;
+    busy = true;
+    saveError = null;
+    refresh();
+    final done = Completer<void>();
+    _active = done.future;
+    try {
+      return await action();
+    } catch (_) {
+      saveError = 'Não foi possível salvar seu progresso. Tente novamente.';
+      return null;
+    } finally {
+      busy = false;
+      done.complete();
+      _active = null;
+      refresh();
+    }
+  }
+
+  Future<void> retrySave() async {
+    await run(() async {
+      final result = await coordinator!.retry();
+      if (result?['kind'] == 'submission') _accept(submissionFromJson(result!));
+      if (result?['kind'] == 'hint') {
+        paidReveal = revealFromJson(result!['reveal']);
+        feedbackSerial++;
+      }
+      if (result?['kind'] == 'advance') _clearRound();
+      if (result?['home'] == true) onHome?.call();
+    });
+  }
+
+  Future<HintOutcome?> buyHint(String id) => run(() async {
+    final result = await coordinator!.purchaseHint(operationId: id);
+    paidReveal = result.reveal;
+    feedbackSerial++;
+    return result;
+  });
+  Future<void> leaveToHome() async {
+    if (dragging) {
+      cancelGesture();
+      return;
+    }
+    await _active;
+    if (saveError != null) return;
+    detach();
+    onHome?.call();
+  }
+
   final GameEngine engine;
   final WheelGesture gesture = WheelGesture();
   WheelGeometry? _geometry;
@@ -48,7 +110,11 @@ class GameController extends ChangeNotifier {
   int feedbackSerial = 0;
   GameState get state => engine.state;
   bool get dragging => gesture.dragging;
-  bool get interactive => state.phase == RoundPhase.playing && !shuffling;
+  bool get interactive =>
+      state.phase == RoundPhase.playing &&
+      !shuffling &&
+      !busy &&
+      saveError == null;
   String get preview {
     final tiles = {for (final tile in state.level.tiles) tile.id: tile.letter};
     return gesture.selected.map((id) => tiles[id] ?? '').join();
@@ -72,6 +138,7 @@ class GameController extends ChangeNotifier {
       celebratingExplorer = false;
       _feedbackTimer?.cancel();
       feedback = null;
+      paidReveal = null;
       notifyListeners();
     }
   }
@@ -87,7 +154,20 @@ class GameController extends ChangeNotifier {
     move(pointer, position);
     final ids = gesture.up(pointer);
     if (ids == null) return;
-    final result = engine.submit(ids, session: state.session);
+    if (coordinator != null) {
+      final session = state.session;
+      unawaited(
+        run(() async {
+          _accept(await coordinator!.submitWord(ids, session: session));
+        }),
+      );
+      return;
+    }
+    _accept(engine.submit(ids, session: state.session));
+  }
+
+  void _accept(SubmissionResult result) {
+    if (_disposed) return;
     if (result.kind == SubmissionKind.extraFound) {
       _discoveries.add(
         ExtraDiscovery(
@@ -158,7 +238,20 @@ class GameController extends ChangeNotifier {
 
   void shuffle({bool reduceMotion = false}) {
     if (!interactive || dragging) return;
+    if (coordinator != null) {
+      unawaited(
+        run(() async {
+          if (await coordinator!.shuffle()) _animateShuffle(reduceMotion);
+        }),
+      );
+      return;
+    }
     if (!engine.shuffle(dragging: dragging)) return;
+    _animateShuffle(reduceMotion);
+  }
+
+  void _animateShuffle(bool reduceMotion) {
+    if (_disposed) return;
     _geometry = null;
     shuffling = !reduceMotion;
     _shuffleTimer?.cancel();
@@ -173,9 +266,31 @@ class GameController extends ChangeNotifier {
 
   void nextLevel() {
     if (state.phase != RoundPhase.completed) return;
-    final next = state.level.id == engine.levels.length
-        ? 1
-        : state.level.id + 1;
+    if (busy || saveError != null) return;
+    if (coordinator != null) {
+      unawaited(
+        run(() async {
+          final next = await coordinator!.advance();
+          _clearRound();
+          if (!next) onHome?.call();
+        }),
+      );
+      return;
+    }
+    final index = engine.levels.indexWhere(
+      (level) => level.id == state.level.id,
+    );
+    if (index + 1 == engine.levels.length) {
+      onHome?.call();
+      return;
+    }
+    engine.startLevel(engine.levels[index + 1].id);
+    _clearRound();
+    refresh();
+  }
+
+  void _clearRound() {
+    if (_disposed) return;
     _cancelTimers();
     gesture.cancel();
     _geometry = null;
@@ -183,7 +298,7 @@ class GameController extends ChangeNotifier {
     shuffling = false;
     clearCollectionEffects(notify: false);
     collectedSerial = 0;
-    engine.startLevel(next);
+    paidReveal = null;
     notifyListeners();
   }
 

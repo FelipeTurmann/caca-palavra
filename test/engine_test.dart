@@ -256,7 +256,7 @@ void main() {
       (root) => root['levels'][0]['words'][0]['display'] = 'G-ATO',
       (root) => root['levels'][0]['words'][0]['display'] = 'XATO',
       (root) => root['levels'][0]['words'][0]['display'] = '',
-      (root) => root['levels'].removeLast(),
+      (root) => root['levels'].clear(),
     ]) {
       final root = jsonDecode(original) as Map<String, dynamic>;
       mutation(root);

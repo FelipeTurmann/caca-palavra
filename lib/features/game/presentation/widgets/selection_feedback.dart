@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/game_theme.dart';
 import '../../domain/game_engine.dart';
+import '../../application/campaign_models.dart';
 import '../game_controller.dart';
 
 class SelectionFeedback extends StatelessWidget {
@@ -125,6 +126,18 @@ class SelectionFeedback extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              if (controller.explorerRewardGranted &&
+                                  (celebrating ||
+                                      result?.explorerUnlocked == true))
+                                Text(
+                                  '+${Economy.explorerReward} moedas!',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF795100),
+                                  ),
+                                ),
                               if (extra && !celebrating)
                                 FittedBox(
                                   fit: BoxFit.scaleDown,

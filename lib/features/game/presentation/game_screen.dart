@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/game_theme.dart';
 import '../domain/game_engine.dart';
 import 'game_controller.dart';
+import 'home_screen.dart';
+import '../application/campaign_models.dart';
 import 'widgets/letter_wheel.dart';
 import 'widgets/selection_feedback.dart';
 import 'widgets/word_slots.dart';
@@ -58,13 +60,68 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> showHint() async {
+    final c = controller;
+    c.cancelGesture();
+    final balance = c.balance;
+    final available = c.engine.canReveal;
+    final enough = balance >= Economy.hintPrice;
+    final id = c.coordinator!.createHintId();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        scrollable: true,
+        title: Text(
+          !available
+              ? 'Nenhuma letra disponível'
+              : !enough
+              ? 'Moedas insuficientes'
+              : 'Revelar uma letra?',
+        ),
+        content: Text(
+          !available
+              ? 'Todas as dicas disponíveis já foram reveladas. Forme as palavras no círculo para continuar.'
+              : !enough
+              ? 'Você tem $balance moedas. Faltam ${Economy.hintPrice - balance} para esta dica.'
+              : 'Uma letra de uma palavra será revelada por 30 moedas. Você tem $balance moedas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(available && enough ? 'Cancelar' : 'Voltar ao jogo'),
+          ),
+          if (available && enough)
+            FilledButton(
+              key: const ValueKey('confirm-hint'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Revelar · 30 moedas'),
+            ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final outcome = await c.buyHint(id);
+    if (!mounted || outcome == null) return;
+    if (outcome.status == 'purchased') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Uma letra revelada!')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller,
     builder: (context, _) => PopScope<void>(
-      canPop: !controller.dragging,
+      canPop: controller.coordinator == null && !controller.dragging,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) controller.cancelGesture();
+        if (!didPop) {
+          if (controller.coordinator != null) {
+            controller.leaveToHome();
+          } else {
+            controller.cancelGesture();
+          }
+        }
       },
       child: Scaffold(
         body: Stack(
@@ -88,7 +145,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             context,
                           ).scale(1);
                           final minimumHeight =
-                              480.0 + math.max(0, scale - 1) * 520;
+                              (controller.coordinator == null ? 480.0 : 600.0) +
+                              math.max(0, scale - 1) * 520;
                           final height = math.max(
                             constraints.maxHeight,
                             minimumHeight,
@@ -122,6 +180,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                   .feedback
                                                   ?.revealedLetter
                                                   ?.targetKey ==
+                                              word.key ||
+                                          controller.paidReveal?.targetKey ==
                                               word.key
                                       ? controller.feedbackSerial
                                       : 0,
@@ -145,6 +205,31 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                   ),
                                   child: Column(
                                     children: [
+                                      if (controller.coordinator != null)
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: Wrap(
+                                            alignment:
+                                                WrapAlignment.spaceBetween,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            spacing: 12,
+                                            children: [
+                                              IconButton(
+                                                tooltip: 'Início',
+                                                onPressed:
+                                                    controller.leaveToHome,
+                                                icon: const Icon(
+                                                  Icons.arrow_back_rounded,
+                                                ),
+                                              ),
+                                              WalletBadge(
+                                                balance: controller.balance,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      SaveStatus(controller: controller),
                                       SizedBox(
                                         width: double.infinity,
                                         child: Wrap(
@@ -202,6 +287,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                         controller: controller,
                                         size: wheelSize,
                                       ),
+                                      if (controller.coordinator != null)
+                                        TextButton.icon(
+                                          key: const ValueKey('hint'),
+                                          onPressed:
+                                              controller.interactive &&
+                                                  !controller.dragging
+                                              ? showHint
+                                              : null,
+                                          icon: const Icon(
+                                            Icons.lightbulb_outline_rounded,
+                                          ),
+                                          label: const Text('Dica · 30 moedas'),
+                                        ),
                                       const SizedBox(height: 5),
                                       const Text(
                                         'Arraste para ligar as letras',
@@ -245,7 +343,7 @@ class _Completion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
-    final last = state.level.id == controller.engine.levels.length;
+    final last = controller.lastLevel;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -297,10 +395,22 @@ class _Completion extends StatelessWidget {
                       ),
                     ),
                     ExtraDiscoveriesSummary(state: state),
+                    if (controller.coordinator != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        controller.coordinator!.freshCompletion
+                            ? '+20 moedas!'
+                            : 'Recompensa de 20 moedas já recebida',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      WalletBadge(balance: controller.balance),
+                      SaveStatus(controller: controller),
+                    ],
                     if (last) ...[
                       const SizedBox(height: 20),
                       const Text(
-                        'Você concluiu os 10 níveis de teste.',
+                        'Você concluiu todos os níveis desta coleção.',
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -309,14 +419,17 @@ class _Completion extends StatelessWidget {
                       width: double.infinity,
                       child: FilledButton.icon(
                         key: const ValueKey('next-level'),
-                        onPressed: controller.nextLevel,
+                        onPressed:
+                            controller.busy || controller.saveError != null
+                            ? null
+                            : controller.nextLevel,
                         icon: Icon(
                           last
-                              ? Icons.replay_rounded
+                              ? Icons.home_rounded
                               : Icons.arrow_forward_rounded,
                         ),
                         label: Text(
-                          last ? 'Reiniciar teste' : 'Próximo nível',
+                          last ? 'Voltar ao início' : 'Próximo nível',
                           textAlign: TextAlign.center,
                         ),
                       ),

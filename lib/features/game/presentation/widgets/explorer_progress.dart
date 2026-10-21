@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/game_theme.dart';
 import '../../domain/game_engine.dart';
+import '../../application/campaign_models.dart';
 import '../game_controller.dart';
 
 const explorerGoldInk = Color(0xFF795100);
@@ -172,6 +173,19 @@ class ExtrasSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       ExplorerProgress(state: state),
+                      if (controller.explorerRewardGranted ||
+                          !state.explorerUnlocked) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          controller.explorerRewardGranted
+                              ? '+${Economy.explorerReward} moedas recebidas pelo selo.'
+                              : 'Conquiste o selo e ganhe ${Economy.explorerReward} moedas neste nível.',
+                          style: const TextStyle(
+                            color: explorerGoldInk,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       const Text(
                         'Cada extra inédita revela um quadrado de uma resposta. Pelo menos uma letra de cada palavra permanece escondida para você formar a resposta.',

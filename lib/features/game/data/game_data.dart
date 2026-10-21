@@ -5,11 +5,15 @@ import 'package:flutter/services.dart';
 import '../domain/game_engine.dart';
 
 class GameData {
-  GameData(List<LevelDefinition> levels, Map<String, WordEntry> lexicon)
-    : levels = List.unmodifiable(levels),
-      lexicon = Map.unmodifiable(lexicon);
+  GameData(
+    List<LevelDefinition> levels,
+    Map<String, WordEntry> lexicon, {
+    this.catalogVersion = 1,
+  }) : levels = List.unmodifiable(levels),
+       lexicon = Map.unmodifiable(lexicon);
   final List<LevelDefinition> levels;
   final Map<String, WordEntry> lexicon;
+  final int catalogVersion;
 
   static Future<GameData> load({AssetBundle? bundle}) async {
     final assets = bundle ?? rootBundle;
@@ -43,17 +47,21 @@ class GameData {
           extraGoal: raw['extraGoal'] as int? ?? 1,
         );
         validateLevel(level, lexicon);
-        if (level.id != levels.length + 1) {
+        if (levels.isNotEmpty && level.id <= levels.last.id) {
           throw const FormatException(
-            'IDs devem ser únicos e sequenciais de 1 a 10.',
+            'IDs devem ser únicos e estar em ordem crescente.',
           );
         }
         levels.add(level);
       }
-      if (levels.length != 10) {
-        throw const FormatException('São necessários exatamente dez níveis.');
+      if (levels.isEmpty) {
+        throw const FormatException('O catálogo não pode estar vazio.');
       }
-      return GameData(levels, lexicon);
+      return GameData(
+        levels,
+        lexicon,
+        catalogVersion: levelRoot['catalogVersion'] as int? ?? 1,
+      );
     } on FormatException {
       rethrow;
     } catch (_) {
