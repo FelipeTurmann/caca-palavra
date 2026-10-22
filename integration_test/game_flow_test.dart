@@ -32,6 +32,7 @@ void main() {
       );
       await tester.pumpWidget(WordGameApp(loader: () async => c));
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('skip-tutorial')), findsNothing);
       expect(find.text('Jogar'), findsOneWidget);
       expect(find.text('60 moedas'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('play')));

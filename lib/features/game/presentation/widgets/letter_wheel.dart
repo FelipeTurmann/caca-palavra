@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../../core/theme/game_theme.dart';
 import '../game_controller.dart';
 import '../wheel_gesture.dart';
@@ -8,7 +7,6 @@ class LetterWheel extends StatelessWidget {
   const LetterWheel({super.key, required this.controller, required this.size});
   final GameController controller;
   final double size;
-
   @override
   Widget build(BuildContext context) {
     final geometry = WheelGeometry(size, controller.state.order);
@@ -76,41 +74,49 @@ class LetterWheel extends StatelessWidget {
                       label:
                           'Letra ${tile.letter}, ficha ${controller.state.level.tiles.indexOf(tile) + 1}',
                       selected: selected.contains(tile.id),
-                      child: Container(
-                        key: ValueKey(tile.id),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: selected.contains(tile.id)
-                                ? [GameTheme.teal, GameTheme.ink]
-                                : [GameTheme.lightTeal, GameTheme.teal],
-                          ),
-                          border: Border.all(
-                            color: selected.contains(tile.id)
-                                ? GameTheme.gold
-                                : Colors.white.withValues(alpha: 0.65),
-                            width: selected.contains(tile.id) ? 3 : 1.5,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x200B5660),
-                              blurRadius: 4,
-                              offset: Offset(0, 3),
+                      child: AnimatedScale(
+                        scale: !reduced && selected.contains(tile.id)
+                            ? 1.07
+                            : 1,
+                        duration: reduced
+                            ? Duration.zero
+                            : const Duration(milliseconds: 100),
+                        child: Container(
+                          key: ValueKey(tile.id),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: selected.contains(tile.id)
+                                  ? [GameTheme.teal, GameTheme.ink]
+                                  : [GameTheme.lightTeal, GameTheme.teal],
                             ),
-                          ],
-                        ),
-                        child: FittedBox(
-                          child: Padding(
-                            padding: const EdgeInsets.all(5),
-                            child: Text(
-                              tile.letter,
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
+                            border: Border.all(
+                              color: selected.contains(tile.id)
+                                  ? GameTheme.gold
+                                  : Colors.white.withValues(alpha: 0.65),
+                              width: selected.contains(tile.id) ? 3 : 1.5,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x200B5660),
+                                blurRadius: 4,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: FittedBox(
+                            child: Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: Text(
+                                tile.letter,
+                                style: const TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
@@ -155,7 +161,6 @@ class ConnectionPainter extends CustomPainter {
   final Map<String, Offset> centers;
   final List<String> selected;
   final Offset? pointer;
-
   @override
   void paint(Canvas canvas, Size size) {
     if (selected.isEmpty) return;

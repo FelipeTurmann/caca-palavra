@@ -1,10 +1,26 @@
-# Conecte palavras — etapa 4
+# Conecte palavras — etapa 5
 
 Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha, desafio diário e carteira local em SQLite. A tela inicial oferece Jogar, Continuar ou Ver resultado da campanha, além de um cartão independente do desafio diário.
 
-## Lojinha simulada
+## Experiência e apresentação (0.2.0+2)
 
-Tocar no saldo da home, campanha, diário ou resultado abre a **Lojinha**. A rodada é preservada ao abrir e fechar. O painel identifica permanentemente: **Loja em teste: compras simuladas, sem cobrança real.**
+Visual com cenário botânico desenhado pelo aplicativo, gatinho estático original, fonte Nunito local e botões com volume. As dicas continuam laterais nos celulares validados e agora exibem seus preços; paisagem usa respostas e círculo em duas áreas. Texto ampliado mantém a preferência do usuário, com rolagem quando necessária, inclusive horizontal na grade de palavras longas.
+
+A engrenagem na home e na partida abre **Configurações**: efeitos sonoros, vibração e redução de animações independentes. A redução do sistema prevalece. São nove efeitos WAV curtos, sem música, com reprodução nativa Android pré-carregada e falha de mídia tolerada. O gesto não espera o áudio. Preferências são carregadas antes de qualquer efeito e gravadas em fila; uma falha mantém a escolha na sessão e oferece nova tentativa.
+
+O tutorial de quatro passos usa G, A, T e O numa sessão isolada: arrastar, soltar, embaralhar e conhecer as ajudas. Tem pular, voltar, experimentar novamente e alternativa sem gesto. O aplicativo abre diretamente na tela inicial, inclusive em perfis novos ou com uma introdução antiga incompleta. A demonstração fica disponível somente em **Configurações → Como jogar**, sem alterar progresso, moedas ou o estado de introdução já armazenado.
+
+A migração SQLite **3 → 4** adiciona somente `app_settings`, com preferências e estado da introdução. Preserva payload 2, ledger, operações preparadas, carteira, campanha e diário. Não reinstale limpando dados; atualize com `adb install -r`.
+
+Documentação desta entrega:
+
+- [Validação e limites da etapa 5](docs/validacao-etapa-5.md).
+- [Origem, licenças, prompt da arte e pontos de configuração](docs/recursos-etapa-5.md).
+- [Roteiro de teste com jogadores](docs/roteiro-jogadores.md).
+
+## Loja simulada
+
+Tocar no saldo da home, campanha, diário ou resultado abre a **Loja**. A rodada é preservada ao abrir e fechar. O painel identifica permanentemente: **Loja em teste: compras simuladas, sem cobrança real.**
 
 | Pacote | Moedas | Preço de referência |
 |---|---:|---:|
@@ -19,6 +35,10 @@ Selecionar um pacote exige **Simular compra**. Cancelar não credita. Uma nova c
 
 Não há cobrança real, SDK de pagamentos, AdMob, credenciais ou backend. Os provedores de compra/anúncio são interfaces separadas, com implementações simuladas. Pedidos, recibos e lançamentos registram `simulated`; esses recibos não comprovam pagamentos reais e não devem ser reaproveitados como tal numa integração futura.
 
+Moedas de recompensas voam até o saldo, no estilo da coleta de extras: selo Explorador (+10), conclusão da campanha (+20 por nível) e conclusão diária (+50). O crédito já está confirmado antes do voo; concluir a animação não altera o saldo. Reabrir resultado, repetir resposta ou retentar o mesmo recibo não repete o efeito. A redução de movimento mantém a atualização do saldo sem voo.
+
+Uma resposta inédita formada pelo jogador recebe um “Muito bem!” animado com a palavra encontrada e brilho somente na sua linha. Extras e Super Dica mantêm seus retornos específicos; a última resposta usa a comemoração de conclusão. A opção de reduzir animações preserva a mensagem estática, sem brilho ou movimento. O tempo fica em `GameTiming.wordCelebration`.
+
 ## Dicas e recompensas
 
 - **60 moedas iniciais**, concedidas uma única vez por perfil.
@@ -29,7 +49,7 @@ Não há cobrança real, SDK de pagamentos, AdMob, credenciais ou backend. Os pr
 - **Super Dica · 100 moedas** resolve uma palavra inteira. Prioriza a maior quantidade de posições escondidas, descontando revelações anteriores; sorteia apenas entre empatadas. A confirmação não mostra antecipadamente a resposta.
 - A Super Dica é uma exceção ao limite de uma posição escondida: a palavra é marcada como encontrada e sua origem assistida é persistida. Cada operação conta como um uso, independentemente da quantidade de letras.
 - Uma Super Dica final gera débito e prêmio separados na mesma transação: **100 → 20** na campanha ou **100 → 50** no diário. Saldo 99 não permite antecipar o prêmio para financiar a compra.
-- Insuficiência de moedas oferece **Ir à lojinha**. Voltar exige nova confirmação da dica; nenhuma compra é acionada automaticamente.
+- Insuficiência de moedas oferece **Ir à loja**. Voltar exige nova confirmação da dica; nenhuma compra é acionada automaticamente.
 
 ## Desafio diário
 
@@ -47,8 +67,9 @@ O relógio é local, sem fonte de tempo confiável externa. Um avanço artificia
 
 ## Persistência e migração
 
-O banco privado continua em `conecte_palavras_v1.db`. A versão SQLite atual é **3** e o payload atual é **2**, com leitura compatível do payload 1. As versões do catálogo da campanha e do diário são independentes.
+O banco privado continua em `conecte_palavras_v1.db`. A versão SQLite atual é **5** e o payload atual é **2**, com leitura compatível do payload 1. As versões do catálogo da campanha e do diário são independentes.
 
+- `app_settings`: preferências e introdução, independentes de rodadas e moedas.
 - `profiles`: saldo, revisão e payload. Não há carteira duplicada nos snapshots.
 - `coin_transactions`: lançamentos com IDs próprios e `parent_operation_id` vinculando os lançamentos a um pedido.
 - `operation_requests`: propostas preparadas e recibos confirmados. A escolha de letra/palavra está na proposta antes do commit.
@@ -72,6 +93,7 @@ dart format lib test integration_test
 flutter analyze --no-pub
 flutter test --no-pub --reporter expanded
 flutter test integration_test/stage4_flow_test.dart -d emulator-5554 --reporter expanded
+flutter test integration_test/stage5_flow_test.dart -d emulator-5554 --reporter expanded
 flutter build apk --debug
 ```
 
@@ -115,3 +137,10 @@ A campanha permanece com dez níveis, 39 respostas e 61 entradas no léxico. Nov
 Gestos, acentos/cedilha, fichas repetidas, segmentos rápidos, desfazer, multitouch, redução de movimento e selo Explorador foram preservados. Não há conta, sincronização, ranking ou cronômetro. O léxico é curado e limitado, não um dicionário completo.
 
 Resultados desta entrega: `docs/validacao-etapa-4.md`. Relatórios anteriores permanecem como histórico.
+
+
+## Plano sem anúncios (protótipo)
+
+O botão redondo AD com bloqueio à esquerda da seleção abre a Loja. Dica e Super Dica permanecem à direita; a seleção e os parabéns têm margens iguais e ficam alinhados ao centro do círculo. No texto ampliado, os controles usam uma faixa própria.
+
+O plano de R$ 15,00 é uma compra única **simulada**, com confirmação explícita, sem cobrança. A ativação fica na tabela SQLite `simulated_entitlements` (schema 5), independente das moedas e das preferências. Ativações repetidas não duplicam o registro. Falha de gravação permite tentar novamente e não confirma a ativação. Os anúncios opcionais de recompensa continuam disponíveis. Ainda não há anúncios automáticos nem integração de pagamento real: esta ativação serve para validar a experiência e não representa recibo de compra real.

@@ -524,7 +524,7 @@ void main() {
       await repo.database.setVersion(2);
       await c.close();
       await open();
-      expect(await repo.database.getVersion(), 3);
+      expect(await repo.database.getVersion(), LocalGameDatabase.version);
       expect(c.profile.balance, balance);
       expect(c.profile.revision, revision);
       expect(c.profile.explorerRewardedLevels, {1});

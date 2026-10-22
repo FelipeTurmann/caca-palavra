@@ -107,6 +107,17 @@ class _FlyingStarState extends State<_FlyingStar>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context) && _animation.isAnimating) {
+      _animation.stop();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onCollected();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _animation.dispose();
     super.dispose();

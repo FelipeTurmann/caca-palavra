@@ -31,6 +31,7 @@ void main() {
       );
       await tester.pumpWidget(WordGameApp(loader: () async => c));
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('skip-tutorial')), findsNothing);
       final controller = tester
           .widget<HomeScreen>(find.byType(HomeScreen))
           .controller;

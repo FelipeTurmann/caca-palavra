@@ -1,6 +1,7 @@
 import 'dart:math' as math;
+import '../../../core/widgets/garden.dart';
+import 'settings_screen.dart';
 import 'package:flutter/material.dart';
-
 import '../../../core/theme/game_theme.dart';
 import '../domain/game_engine.dart';
 import 'game_controller.dart';
@@ -8,10 +9,12 @@ import 'home_screen.dart';
 import 'shop_screen.dart';
 import '../application/campaign_models.dart';
 import 'widgets/letter_wheel.dart';
+import 'widgets/ad_free_button.dart';
 import 'widgets/selection_feedback.dart';
 import 'widgets/word_slots.dart';
 import 'widgets/explorer_progress.dart';
 import 'widgets/extra_collection_layer.dart';
+import 'widgets/coin_collection_layer.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key, required this.controller});
@@ -34,6 +37,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   final _effectsKey = GlobalKey();
   final _extraSourceKey = GlobalKey();
   final _extraTargetKey = GlobalKey();
+  final _walletKey = GlobalKey();
+  final _completionCoinSourceKey = GlobalKey();
   @override
   void initState() {
     super.initState();
@@ -43,17 +48,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) controller.refreshCalendar();
+    if (state == AppLifecycleState.resumed) {
+      controller.effects.resume();
+      controller.refreshCalendar();
+    }
     if (state != AppLifecycleState.resumed) {
-      controller.cancelGesture();
-      controller.clearCollectionEffects();
+      controller.suspendPresentation();
     }
   }
 
   @override
   void didChangeMetrics() {
-    controller.cancelGesture();
-    controller.clearCollectionEffects();
+    controller.cancelTransientPresentation();
   }
 
   @override
@@ -67,6 +73,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void showExtras() {
     showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) => ExtrasSheet(controller: controller),
@@ -86,6 +95,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final enough = balance >= price, id = c.coordinator!.createHintId();
     final choice = await showDialog<int>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) {
         _hintContext = context;
         return AlertDialog(
@@ -150,12 +162,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (superHint) {
       await c.buySuperHint(id, expected);
     } else {
-      final outcome = await c.buyHint(id, expected: expected);
-      if (mounted && outcome?.status == 'purchased') {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Uma letra revelada!')));
-      }
+      await c.buyHint(id, expected: expected);
     }
   }
 
@@ -178,14 +185,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           key: _effectsKey,
           fit: StackFit.expand,
           children: [
-            DecoratedBox(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [GameTheme.cream, GameTheme.creamEnd],
-                ),
-              ),
+            Garden(
+              quiet: true,
               child: SafeArea(
                 child: controller.dailyInvalid
                     ? Center(
@@ -228,12 +229,31 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         ),
                       )
                     : controller.state.phase == RoundPhase.completed
-                    ? _Completion(controller: controller)
+                    ? _Completion(
+                        controller: controller,
+                        walletKey: _walletKey,
+                        rewardSourceKey: _completionCoinSourceKey,
+                      )
                     : LayoutBuilder(
                         builder: (context, constraints) {
                           final scale = MediaQuery.textScalerOf(
                             context,
                           ).scale(1);
+                          if (controller.coordinator != null &&
+                              controller.saveError == null &&
+                              scale <= 1.3 &&
+                              constraints.maxWidth >= 568 &&
+                              constraints.maxWidth > constraints.maxHeight) {
+                            return _WideRound(
+                              controller: controller,
+                              sourceKey: _extraSourceKey,
+                              targetKey: _extraTargetKey,
+                              walletKey: _walletKey,
+                              onExtras: showExtras,
+                              onHint: showHint,
+                              onSuperHint: () => showHint(superHint: true),
+                            );
+                          }
                           final minimumHeight =
                               (controller.coordinator == null ? 480.0 : 660.0) +
                               math.max(0, scale - 1) * 520;
@@ -254,6 +274,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               for (final word in controller.state.level.words)
                                 WordSlots(
                                   word: word,
+                                  celebrate:
+                                      controller.feedback?.kind ==
+                                          SubmissionKind.targetFound &&
+                                      controller.feedback?.completed == false &&
+                                      controller.feedback?.word?.key ==
+                                          word.key,
                                   revealed:
                                       controller.state.revealedLetters[word
                                           .key] ??
@@ -262,8 +288,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                     word.key,
                                   ),
                                   pulse:
-                                      controller.feedback?.kind ==
-                                                  SubmissionKind.targetFound &&
+                                      (controller.feedback?.kind ==
+                                                      SubmissionKind
+                                                          .targetFound ||
+                                                  controller.feedback?.kind ==
+                                                      SubmissionKind
+                                                          .superResolved) &&
                                               controller.feedback?.word?.key ==
                                                   word.key ||
                                           controller
@@ -303,14 +333,35 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                     style: const TextStyle(fontSize: 14),
                                   ),
                                 ),
+                                if (controller.coordinator != null && largeText)
+                                  Row(
+                                    children: [
+                                      AdFreeButton(controller: controller),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerRight,
+                                          child: _HintTools(
+                                            controller: controller,
+                                            horizontal: true,
+                                            onHint: showHint,
+                                            onSuperHint: () =>
+                                                showHint(superHint: true),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 Stack(
                                   children: [
                                     Column(
                                       children: [
                                         Padding(
-                                          padding: EdgeInsets.only(
-                                            right:
-                                                controller.coordinator == null
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal:
+                                                controller.coordinator ==
+                                                        null ||
+                                                    largeText
                                                 ? 0
                                                 : 56,
                                           ),
@@ -325,63 +376,25 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                         ),
                                       ],
                                     ),
-                                    if (controller.coordinator != null)
+                                    if (controller.coordinator != null &&
+                                        !largeText)
+                                      Positioned(
+                                        left: 0,
+                                        top: 0,
+                                        child: AdFreeButton(
+                                          controller: controller,
+                                        ),
+                                      ),
+                                    if (controller.coordinator != null &&
+                                        !largeText)
                                       Positioned(
                                         right: 0,
                                         top: 0,
-                                        child: Column(
-                                          children: [
-                                            IconButton.filledTonal(
-                                              key: const ValueKey('hint'),
-                                              tooltip: 'Dica · 30 moedas',
-                                              constraints: const BoxConstraints(
-                                                minWidth: 48,
-                                                minHeight: 48,
-                                              ),
-                                              style: IconButton.styleFrom(
-                                                backgroundColor: const Color(
-                                                  0xFFD9EBE6,
-                                                ),
-                                                foregroundColor: GameTheme.teal,
-                                              ),
-                                              onPressed:
-                                                  controller.interactive &&
-                                                      !controller.dragging
-                                                  ? showHint
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.lightbulb_outline_rounded,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            IconButton.filledTonal(
-                                              key: const ValueKey('super-hint'),
-                                              tooltip:
-                                                  'Super Dica · 100 moedas',
-                                              constraints: const BoxConstraints(
-                                                minWidth: 48,
-                                                minHeight: 48,
-                                              ),
-                                              style: IconButton.styleFrom(
-                                                backgroundColor: const Color(
-                                                  0xFFFFEDB7,
-                                                ),
-                                                foregroundColor: const Color(
-                                                  0xFF795100,
-                                                ),
-                                              ),
-                                              onPressed:
-                                                  controller.interactive &&
-                                                      !controller.dragging
-                                                  ? () => showHint(
-                                                      superHint: true,
-                                                    )
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.auto_fix_high_rounded,
-                                              ),
-                                            ),
-                                          ],
+                                        child: _HintTools(
+                                          controller: controller,
+                                          onHint: showHint,
+                                          onSuperHint: () =>
+                                              showHint(superHint: true),
                                         ),
                                       ),
                                   ],
@@ -433,15 +446,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 WrapCrossAlignment.center,
                                             spacing: 12,
                                             children: [
-                                              IconButton(
-                                                tooltip: 'Início',
-                                                onPressed:
-                                                    controller.leaveToHome,
-                                                icon: const Icon(
-                                                  Icons.arrow_back_rounded,
-                                                ),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    tooltip: 'Início',
+                                                    onPressed:
+                                                        controller.leaveToHome,
+                                                    icon: const Icon(
+                                                      Icons.arrow_back_rounded,
+                                                    ),
+                                                  ),
+                                                  SettingsButton(
+                                                    controller: controller,
+                                                  ),
+                                                ],
                                               ),
                                               WalletBadge(
+                                                key: _walletKey,
                                                 balance: controller.balance,
                                                 onPressed: () => openShop(
                                                   context,
@@ -470,13 +492,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                       else
                                         Row(
                                           children: [
-                                            Expanded(
-                                              child: FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                alignment: Alignment.centerLeft,
-                                                child: levelLabel,
-                                              ),
-                                            ),
+                                            Expanded(child: levelLabel),
                                             const SizedBox(width: 16),
                                             extrasButton,
                                           ],
@@ -486,23 +502,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                           top: 3,
                                           bottom: 8,
                                         ),
-                                        child: largeText
-                                            ? Text(
-                                                'Encontre ${controller.state.level.words.length} palavras',
-                                                textAlign: TextAlign.center,
-                                                style: Theme.of(
-                                                  context,
-                                                ).textTheme.titleLarge,
-                                              )
-                                            : FittedBox(
-                                                fit: BoxFit.scaleDown,
-                                                child: Text(
-                                                  'Encontre ${controller.state.level.words.length} palavras',
-                                                  style: Theme.of(
-                                                    context,
-                                                  ).textTheme.titleLarge,
-                                                ),
-                                              ),
+                                        child: Text(
+                                          'Encontre ${controller.state.level.words.length} palavras',
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.titleLarge,
+                                        ),
                                       ),
                                       if (largeText)
                                         playArea(wheelSize, bounded: false)
@@ -581,6 +587,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       ),
               ),
             ),
+            Positioned.fill(
+              child: CoinCollectionLayer(
+                controller: controller,
+                layerKey: _effectsKey,
+                explorerSourceKey: _extraSourceKey,
+                completionSourceKey: _completionCoinSourceKey,
+                walletKey: _walletKey,
+              ),
+            ),
+            if (controller.state.phase == RoundPhase.completed)
+              Positioned.fill(
+                child: VictoryConfetti(
+                  key: ValueKey(
+                    'victory-${controller.state.session}-${controller.victorySerial}',
+                  ),
+                  celebrate: controller.freshVictory,
+                ),
+              ),
             if (controller.state.phase != RoundPhase.completed)
               Positioned.fill(
                 child: ExtraCollectionLayer(
@@ -597,10 +621,290 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   );
 }
 
-class _Completion extends StatelessWidget {
-  const _Completion({required this.controller});
+class _HintTools extends StatelessWidget {
+  const _HintTools({
+    required this.controller,
+    required this.onHint,
+    required this.onSuperHint,
+    this.horizontal = false,
+  });
   final GameController controller;
+  final VoidCallback onHint, onSuperHint;
+  final bool horizontal;
+  @override
+  Widget build(BuildContext context) {
+    Widget button(
+      String key,
+      String label,
+      int price,
+      IconData icon,
+      VoidCallback action,
+      bool gold,
+    ) => IconButton.filledTonal(
+      key: ValueKey(key),
+      tooltip: '$label · $price moedas',
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      style: IconButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        backgroundColor: gold
+            ? const Color(0xFFFFEDB7)
+            : const Color(0xFFD9EBE6),
+        foregroundColor: gold ? const Color(0xFF795100) : GameTheme.teal,
+      ),
+      onPressed: controller.interactive && !controller.dragging ? action : null,
+      icon: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 22),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$price',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(Icons.monetization_on_rounded, size: 11),
+            ],
+          ),
+        ],
+      ),
+    );
+    final children = [
+      button(
+        'hint',
+        'Dica',
+        30,
+        Icons.lightbulb_outline_rounded,
+        onHint,
+        false,
+      ),
+      button(
+        'super-hint',
+        'Super Dica',
+        100,
+        Icons.auto_fix_high_rounded,
+        onSuperHint,
+        true,
+      ),
+    ];
+    return horizontal
+        ? Wrap(alignment: WrapAlignment.center, spacing: 12, children: children)
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              children.first,
+              const SizedBox(height: 4),
+              children.last,
+            ],
+          );
+  }
+}
 
+class _WideRound extends StatelessWidget {
+  const _WideRound({
+    required this.controller,
+    required this.sourceKey,
+    required this.targetKey,
+    required this.walletKey,
+    required this.onExtras,
+    required this.onHint,
+    required this.onSuperHint,
+  });
+  final GameController controller;
+  final GlobalKey sourceKey, targetKey, walletKey;
+  final VoidCallback onExtras, onHint, onSuperHint;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final contentHeight = math.max(box.maxHeight, 300.0);
+      return SingleChildScrollView(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: SizedBox(
+              height: contentHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Início',
+                          onPressed: controller.leaveToHome,
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                        SettingsButton(controller: controller),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            controller.isDaily
+                                ? 'Desafio diário'
+                                : 'Nível ${controller.state.level.id}',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        WalletBadge(
+                          key: walletKey,
+                          balance: controller.balance,
+                          onPressed: () => openShop(context, controller),
+                        ),
+                      ],
+                    ),
+                    SaveStatus(controller: controller),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Encontre ${controller.state.level.words.length} palavras',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleLarge,
+                                    ),
+                                    ExtrasButton(
+                                      key: targetKey,
+                                      controller: controller,
+                                      onPressed: onExtras,
+                                    ),
+                                  ],
+                                ),
+                                Expanded(
+                                  child: ListView(
+                                    key: ValueKey(
+                                      'answers-${controller.state.session}',
+                                    ),
+                                    children: [
+                                      for (final word
+                                          in controller.state.level.words)
+                                        WordSlots(
+                                          word: word,
+                                          celebrate:
+                                              controller.feedback?.kind ==
+                                                  SubmissionKind.targetFound &&
+                                              controller.feedback?.completed ==
+                                                  false &&
+                                              controller.feedback?.word?.key ==
+                                                  word.key,
+                                          found: controller.state.targets
+                                              .contains(word.key),
+                                          revealed:
+                                              controller
+                                                  .state
+                                                  .revealedLetters[word.key] ??
+                                              const {},
+                                          pulse:
+                                              controller.feedback?.word?.key ==
+                                                      word.key ||
+                                                  controller
+                                                          .paidReveal
+                                                          ?.targetKey ==
+                                                      word.key ||
+                                                  controller
+                                                          .feedback
+                                                          ?.revealedLetter
+                                                          ?.targetKey ==
+                                                      word.key
+                                              ? controller.feedbackSerial
+                                              : 0,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '${controller.state.targets.length} de ${controller.state.level.words.length} palavras',
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, right) {
+                                final size = math.min(
+                                  320.0,
+                                  math.min(
+                                    right.maxWidth,
+                                    math.max(224.0, right.maxHeight - 64),
+                                  ),
+                                );
+                                return SingleChildScrollView(
+                                  child: Stack(
+                                    children: [
+                                      Column(
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 56,
+                                            ),
+                                            child: SelectionFeedback(
+                                              controller: controller,
+                                              extraIconKey: sourceKey,
+                                            ),
+                                          ),
+                                          LetterWheel(
+                                            controller: controller,
+                                            size: size,
+                                          ),
+                                        ],
+                                      ),
+                                      Positioned(
+                                        left: 0,
+                                        top: 0,
+                                        child: AdFreeButton(
+                                          controller: controller,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 0,
+                                        top: 0,
+                                        child: _HintTools(
+                                          controller: controller,
+                                          onHint: onHint,
+                                          onSuperHint: onSuperHint,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _Completion extends StatelessWidget {
+  const _Completion({
+    required this.controller,
+    required this.walletKey,
+    required this.rewardSourceKey,
+  });
+  final GlobalKey walletKey, rewardSourceKey;
+  final GameController controller;
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
@@ -617,16 +921,53 @@ class _Completion extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(22),
-                      decoration: const BoxDecoration(
-                        color: GameTheme.teal,
-                        shape: BoxShape.circle,
+                    if (controller.coordinator != null) ...[
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: WalletBadge(
+                          key: walletKey,
+                          balance: controller.balance,
+                          onPressed: () => openShop(context, controller),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        size: 62,
-                        color: Colors.white,
+                      const SizedBox(height: 12),
+                    ],
+                    TweenAnimationBuilder<double>(
+                      tween: Tween(
+                        begin:
+                            controller.freshVictory &&
+                                !MediaQuery.disableAnimationsOf(context)
+                            ? .9
+                            : 1,
+                        end: 1,
+                      ),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 350),
+                      builder: (context, value, child) =>
+                          Transform.scale(scale: value, child: child),
+                      child: Container(
+                        padding: const EdgeInsets.all(22),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF92C96F), Color(0xFF43975D)],
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color(0x225B9D5C),
+                              offset: Offset(0, 5),
+                              blurRadius: 12,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          size: 62,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -661,15 +1002,12 @@ class _Completion extends StatelessWidget {
                     if (controller.coordinator != null) ...[
                       const SizedBox(height: 16),
                       Text(
+                        key: rewardSourceKey,
                         controller.coordinator!.freshCompletion
                             ? '+${controller.completionReward} moedas!'
                             : 'Recompensa de ${controller.completionReward} moedas já recebida',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      WalletBadge(
-                        balance: controller.balance,
-                        onPressed: () => openShop(context, controller),
                       ),
                       SaveStatus(controller: controller),
                     ],
@@ -683,18 +1021,13 @@ class _Completion extends StatelessWidget {
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton.icon(
+                      child: VolumeButton(
                         key: const ValueKey('next-level'),
                         onPressed:
                             controller.busy || controller.saveError != null
                             ? null
                             : controller.nextLevel,
-                        icon: Icon(
-                          last
-                              ? Icons.home_rounded
-                              : Icons.arrow_forward_rounded,
-                        ),
-                        label: Text(
+                        child: Text(
                           last ? 'Voltar ao início' : 'Próximo nível',
                           textAlign: TextAlign.center,
                         ),

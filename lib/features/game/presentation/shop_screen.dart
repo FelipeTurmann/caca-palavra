@@ -1,21 +1,27 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/garden.dart';
 import '../application/game_session_coordinator.dart';
 import '../application/shop_models.dart';
 import '../../../core/theme/game_theme.dart';
 import 'game_controller.dart';
 import 'home_screen.dart';
+import 'widgets/ad_free_plan_card.dart';
 
 Future<void> openShop(BuildContext context, GameController controller) async {
   if (controller.shopOpen) return;
   controller.shopOpen = true;
-  controller.cancelGesture();
+  controller.cancelTransientPresentation();
   try {
     await controller.waitIdle();
+    await controller.adFreePlan.flush();
     await controller.refreshCalendar();
     if (!context.mounted || controller.saveError != null) return;
     controller.creditMessage = null;
     await showModalBottomSheet<void>(
       context: context,
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       isScrollControlled: true,
       useSafeArea: true,
       isDismissible: false,
@@ -25,6 +31,7 @@ Future<void> openShop(BuildContext context, GameController controller) async {
         child: ShopScreen(controller: controller),
       ),
     );
+    await controller.adFreePlan.flush();
     await controller.refreshCalendar();
   } finally {
     controller.shopOpen = false;
@@ -39,6 +46,9 @@ class ShopScreen extends StatelessWidget {
     final id = operationId('purchase');
     final ok = await showDialog<bool>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (context) => AlertDialog(
         scrollable: true,
         title: const Text('Simular compra?'),
@@ -67,12 +77,16 @@ class ShopScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller,
+    listenable: Listenable.merge([controller, controller.adFreePlan]),
     builder: (context, _) => PopScope<void>(
-      canPop: !controller.busy && controller.saveError == null,
+      canPop:
+          !controller.busy &&
+          !controller.adFreePlan.busy &&
+          controller.saveError == null,
       onPopInvokedWithResult: (didPop, _) async {
         if (!didPop) {
           await controller.waitIdle();
+          await controller.adFreePlan.flush();
           if (context.mounted && controller.saveError == null) {
             Navigator.pop(context);
           }
@@ -86,6 +100,7 @@ class ShopScreen extends StatelessWidget {
             tooltip: 'Fechar loja',
             onPressed: () async {
               await controller.waitIdle();
+              await controller.adFreePlan.flush();
               if (context.mounted && controller.saveError == null) {
                 Navigator.pop(context);
               }
@@ -93,79 +108,100 @@ class ShopScreen extends StatelessWidget {
             icon: const Icon(Icons.close_rounded),
           ),
         ),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              const Text(
-                'Loja em teste: compras simuladas, sem cobrança real.',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: WalletBadge(balance: controller.balance),
-              ),
-              SaveStatus(controller: controller),
-              if (controller.creditMessage != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      controller.creditMessage!,
-                      key: const ValueKey('credit-confirmation'),
-                      style: const TextStyle(
-                        color: GameTheme.teal,
-                        fontWeight: FontWeight.w700,
+        body: Garden(
+          quiet: true,
+          child: SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 680),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Loja em teste: compras simuladas, sem cobrança real.',
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: WalletBadge(balance: controller.balance),
+                      ),
+                      SaveStatus(controller: controller),
+                      if (controller.creditMessage != null)
+                        Semantics(
+                          liveRegion: true,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              controller.creditMessage!,
+                              key: const ValueKey('credit-confirmation'),
+                              style: const TextStyle(
+                                color: GameTheme.teal,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      AdFreePlanCard(controller: controller),
+                      const SizedBox(height: 12),
+                      for (final package in ShopCatalog.packages)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Icon(
+                                  Icons.monetization_on_rounded,
+                                  size: 32,
+                                  color: Color(0xFFAE7412),
+                                ),
+                                Text(
+                                  '${package.amount} moedas',
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                                Text('${package.price} · preço de referência'),
+                                const SizedBox(height: 8),
+                                VolumeButton(
+                                  key: ValueKey(package.id),
+                                  onPressed:
+                                      controller.busy ||
+                                          controller.saveError != null
+                                      ? null
+                                      : () => purchase(context, package),
+                                  child: const Text('Selecionar pacote'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        key: const ValueKey('simulated-ad'),
+                        onPressed:
+                            controller.busy || controller.saveError != null
+                            ? null
+                            : () => controller.credit(
+                                () => controller.coordinator!.simulateAd(),
+                              ),
+                        icon: const Icon(Icons.play_circle_outline_rounded),
+                        label: const Text(
+                          'Assistir anúncio · +15 moedas',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const Text(
+                        'Simulação: as moedas são concedidas sem exibir vídeo.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
-              for (final package in ShopCatalog.packages)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '${package.amount} moedas',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        Text('${package.price} · preço de referência'),
-                        const SizedBox(height: 8),
-                        FilledButton(
-                          key: ValueKey(package.id),
-                          onPressed:
-                              controller.busy || controller.saveError != null
-                              ? null
-                              : () => purchase(context, package),
-                          child: const Text('Selecionar pacote'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                key: const ValueKey('simulated-ad'),
-                onPressed: controller.busy || controller.saveError != null
-                    ? null
-                    : () => controller.credit(
-                        () => controller.coordinator!.simulateAd(),
-                      ),
-                icon: const Icon(Icons.play_circle_outline_rounded),
-                label: const Text(
-                  'Assistir anúncio · +15 moedas',
-                  textAlign: TextAlign.center,
-                ),
               ),
-              const Text(
-                'Simulação: as moedas são concedidas sem exibir vídeo.',
-                textAlign: TextAlign.center,
-              ),
-            ],
+            ),
           ),
         ),
       ),

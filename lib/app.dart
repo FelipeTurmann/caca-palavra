@@ -1,4 +1,9 @@
 import 'dart:async';
+import 'core/monetization/ad_free_plan.dart';
+import 'core/preferences/player_preferences.dart';
+import 'core/feedback/game_feedback.dart';
+import 'core/widgets/garden.dart';
+import 'core/widgets/motion_policy.dart';
 import 'package:flutter/material.dart';
 import 'core/theme/game_theme.dart';
 import 'features/game/application/game_session_coordinator.dart';
@@ -25,7 +30,14 @@ Future<GameSessionCoordinator> loadGame() async {
 }
 
 class WordGameApp extends StatefulWidget {
-  const WordGameApp({super.key, this.loader});
+  const WordGameApp({
+    super.key,
+    this.loader,
+    this.preferencesStore,
+    this.feedbackOutput,
+  });
+  final PreferencesStore? preferencesStore;
+  final FeedbackOutput? feedbackOutput;
   final Future<GameSessionCoordinator> Function()? loader;
   @override
   State<WordGameApp> createState() => _WordGameAppState();
@@ -40,7 +52,12 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _loaded?.refreshCalendar();
+    if (state == AppLifecycleState.resumed) {
+      _loaded?.effects.resume();
+      _loaded?.refreshCalendar();
+    } else {
+      _loaded?.suspendPresentation();
+    }
   }
 
   late Future<GameController> _loading = _load();
@@ -48,8 +65,22 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   bool _playing = false;
   Future<GameController> _load() async {
     final session = await (widget.loader ?? loadGame)();
+    final repository = session.repository;
+    final store =
+        widget.preferencesStore ??
+        (repository is SqliteProgressRepository
+            ? SqlitePreferencesStore(repository.database)
+            : MemoryPreferencesStore());
+    final preferences = await PreferencesController.load(store);
     final controller = GameController(
       session.engine,
+      adFreePlan: await AdFreePlanController.load(
+        repository is SqliteProgressRepository
+            ? SqliteAdFreePlanStore(repository.database)
+            : MemoryAdFreePlanStore(),
+      ),
+      preferences: preferences,
+      feedbackOutput: widget.feedbackOutput ?? AndroidFeedbackOutput(),
       coordinator: session,
       onHome: () {
         if (mounted) setState(() => _playing = false);
@@ -59,7 +90,8 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
       controller.dispose();
       await session.close();
     } else {
-      _loaded = controller;
+      setState(() => _loaded = controller);
+      unawaited(controller.effects.prepare());
       controller.scheduleCalendarCheck();
     }
     return controller;
@@ -85,7 +117,15 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _loaded?.dispose();
-    if (_loaded != null) unawaited(_loaded!.coordinator!.close());
+    if (_loaded != null) {
+      final controller = _loaded!;
+      unawaited(
+        Future.wait([
+          controller.preferences.flush(),
+          controller.adFreePlan.flush(),
+        ]).then((_) => controller.coordinator!.close()),
+      );
+    }
     super.dispose();
   }
 
@@ -94,6 +134,26 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     debugShowCheckedModeBanner: false,
     title: 'Conecte palavras',
     theme: GameTheme.theme,
+    builder: (context, child) {
+      final preferences = _loaded?.preferences;
+      if (preferences == null) return child!;
+      return ListenableBuilder(
+        listenable: preferences,
+        builder: (context, _) {
+          final media = MediaQuery.of(context);
+          return MotionPolicy(
+            systemReduced: media.disableAnimations,
+            child: MediaQuery(
+              data: media.copyWith(
+                disableAnimations:
+                    media.disableAnimations || preferences.value.reduceMotion,
+              ),
+              child: child!,
+            ),
+          );
+        },
+      );
+    },
     home: FutureBuilder<GameController>(
       future: _loading,
       builder: (context, snapshot) {
@@ -101,28 +161,30 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
           return Scaffold(
             body: SafeArea(
               child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Não foi possível carregar seu progresso.\nSeus dados foram preservados.',
-                        textAlign: TextAlign.center,
-                      ),
-                      if (snapshot.error is FormatException)
-                        Text(
-                          (snapshot.error as FormatException).message,
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Não foi possível carregar seu progresso.\nSeus dados foram preservados.',
                           textAlign: TextAlign.center,
                         ),
-                      const SizedBox(height: 20),
-                      FilledButton(
-                        onPressed: () => setState(() {
-                          _loading = _load();
-                        }),
-                        child: const Text('Tentar novamente'),
-                      ),
-                    ],
+                        if (snapshot.error is FormatException)
+                          Text(
+                            (snapshot.error as FormatException).message,
+                            textAlign: TextAlign.center,
+                          ),
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          onPressed: () => setState(() {
+                            _loading = _load();
+                          }),
+                          child: const Text('Tentar novamente'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -131,7 +193,10 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
         }
         if (!snapshot.hasData) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Garden(
+              quiet: true,
+              child: Center(child: CircularProgressIndicator()),
+            ),
           );
         }
         final controller = snapshot.requireData;

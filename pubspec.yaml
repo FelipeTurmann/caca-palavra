@@ -1,7 +1,7 @@
 name: caca_palavra
 description: Motor local de conectar palavras em português brasileiro.
 publish_to: none
-version: 0.1.0+1
+version: 0.2.0+3
 environment:
   sdk: ^3.12.0
 dependencies:
@@ -23,3 +23,9 @@ flutter:
     - assets/data/daily_levels.json
     - assets/data/levels.json
     - assets/data/lexicon_pt_br.json
+    - assets/mascot-cat.png
+    - assets/audio/
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito.ttf

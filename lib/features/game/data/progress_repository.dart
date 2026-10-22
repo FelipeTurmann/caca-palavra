@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
-
 import '../application/campaign_models.dart';
 import '../application/daily_models.dart';
 import '../application/shop_models.dart';
@@ -34,7 +32,7 @@ abstract interface class ProgressRepository {
 }
 
 class LocalGameDatabase {
-  static const version = 3;
+  static const version = 5;
   static Future<Database> open({
     DatabaseFactory? factory,
     String? databasePath,
@@ -59,8 +57,15 @@ class LocalGameDatabase {
             'CREATE TABLE coin_transactions (operation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL REFERENCES profiles(profile_id), kind TEXT NOT NULL, amount INTEGER NOT NULL, level_id INTEGER, round_id TEXT, metadata_json TEXT NOT NULL, created_at TEXT NOT NULL, parent_operation_id TEXT NOT NULL)',
           );
           await createRequests(db);
+          await createSettings(db, legacy: false);
+          await createAdFreePlan(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 5) await createAdFreePlan(db);
+          if (oldVersion < 4) {
+            final existing = await db.query('profiles', limit: 1);
+            await createSettings(db, legacy: existing.isNotEmpty);
+          }
           if (oldVersion < 2) await createRequests(db);
           if (oldVersion < 3) {
             final columns = await db.rawQuery(
@@ -78,6 +83,26 @@ class LocalGameDatabase {
         },
       ),
     );
+  }
+
+  static Future<void> createAdFreePlan(DatabaseExecutor db) => db.execute(
+    'CREATE TABLE IF NOT EXISTS simulated_entitlements (id TEXT PRIMARY KEY, activated_at TEXT NOT NULL)',
+  );
+
+  static Future<void> createSettings(
+    DatabaseExecutor db, {
+    required bool legacy,
+  }) async {
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS app_settings (id TEXT PRIMARY KEY, sound INTEGER NOT NULL CHECK(sound IN (0,1)), haptics INTEGER NOT NULL CHECK(haptics IN (0,1)), reduce_motion INTEGER NOT NULL CHECK(reduce_motion IN (0,1)), introduction TEXT NOT NULL)',
+    );
+    await db.insert('app_settings', {
+      'id': 'local',
+      'sound': 1,
+      'haptics': 1,
+      'reduce_motion': 0,
+      'introduction': legacy ? 'exempted' : 'unseen',
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   static Future<void> createRequests(DatabaseExecutor db) => db.execute(
@@ -103,7 +128,6 @@ class SqliteProgressRepository implements ProgressRepository {
     await LocalGameDatabase.open(factory: factory, databasePath: databasePath),
     initialBalance: initialBalance,
   );
-
   @override
   Future<CampaignProfile> initialize(GameData data) async {
     if (initialBalance < 0) throw ArgumentError('Saldo inicial inválido.');
@@ -158,7 +182,6 @@ class SqliteProgressRepository implements ProgressRepository {
           jsonDecode(row['payload_json'] as String) as Map,
         ),
       );
-
   @override
   Future<CampaignProfile> load(GameData data) => database.transaction((
     txn,
@@ -175,7 +198,6 @@ class SqliteProgressRepository implements ProgressRepository {
     await _validate(txn, profile, data);
     return profile;
   });
-
   Future<void> _validate(
     DatabaseExecutor db,
     CampaignProfile profile,
@@ -476,7 +498,6 @@ class SqliteProgressRepository implements ProgressRepository {
         ).toJson(),
       ) ==
       canonicalJson(proposal.toJson());
-
   @override
   Future<void> prepare(SaveProposal proposal) async {
     await database.transaction((txn) async {

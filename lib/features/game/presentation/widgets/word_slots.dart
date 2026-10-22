@@ -13,9 +13,11 @@ class WordSlots extends StatelessWidget {
     required this.found,
     required this.pulse,
     this.revealed = const {},
+    this.celebrate = false,
   });
   final WordEntry word;
   final bool found;
+  final bool celebrate;
   final int pulse;
   final Set<int> revealed;
 
@@ -31,12 +33,37 @@ class WordSlots extends StatelessWidget {
         child: TweenAnimationBuilder<double>(
           key: ValueKey('${word.key}-$pulse'),
           tween: Tween(begin: 0, end: 1),
-          duration: reduced ? Duration.zero : GameTiming.pulse,
+          duration: reduced
+              ? Duration.zero
+              : celebrate
+              ? GameTiming.wordCelebration
+              : GameTiming.pulse,
           builder: (context, value, child) => Transform.scale(
             scale: (found || revealed.isNotEmpty) && pulse > 0
                 ? 1 + math.sin(math.pi * value) * 0.045
                 : 1,
-            child: child,
+            child: celebrate && found && !reduced && value < 1
+                ? ShaderMask(
+                    key: ValueKey('word-shine-${word.key}'),
+                    blendMode: BlendMode.srcATop,
+                    shaderCallback: (bounds) {
+                      final width = bounds.width * .45;
+                      final left = -width + (bounds.width + width) * value;
+                      return const LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Color(0x88FFFFFF),
+                          Color(0x55F4BD4F),
+                          Colors.transparent,
+                        ],
+                        stops: [0, .45, .55, 1],
+                      ).createShader(
+                        Rect.fromLTWH(left, 0, width, bounds.height),
+                      );
+                    },
+                    child: child,
+                  )
+                : child,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 8),
@@ -46,11 +73,17 @@ class WordSlots extends StatelessWidget {
                 final scale = MediaQuery.textScalerOf(
                   context,
                 ).scale(1).clamp(1.0, 2.0);
-                final side = math.min(
-                  44.0 * scale,
-                  (constraints.maxWidth - (count - 1) * 7) / count,
-                );
-                return Row(
+                final horizontalScroll =
+                    scale > 1.3 &&
+                    count * 44 * scale + (count - 1) * 7 > constraints.maxWidth;
+                final side = horizontalScroll
+                    ? 44.0 * scale
+                    : math.min(
+                        44.0 * scale,
+                        (constraints.maxWidth - (count - 1) * 7) / count,
+                      );
+                final row = Row(
+                  mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (var index = 0; index < count; index++) ...[
@@ -123,6 +156,12 @@ class WordSlots extends StatelessWidget {
                     ],
                   ],
                 );
+                return horizontalScroll
+                    ? SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: row,
+                      )
+                    : row;
               },
             ),
           ),

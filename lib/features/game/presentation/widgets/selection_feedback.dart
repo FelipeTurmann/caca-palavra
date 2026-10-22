@@ -5,6 +5,7 @@ import '../../../../core/theme/game_theme.dart';
 import '../../domain/game_engine.dart';
 import '../../application/campaign_models.dart';
 import '../game_controller.dart';
+import 'word_success_feedback.dart';
 
 class SelectionFeedback extends StatelessWidget {
   const SelectionFeedback({
@@ -69,6 +70,18 @@ class SelectionFeedback extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
+                ),
+              )
+            : result != null &&
+                  result.kind == SubmissionKind.targetFound &&
+                  !result.completed
+            ? Semantics(
+                liveRegion: true,
+                child: WordSuccessFeedback(
+                  key: ValueKey(
+                    'word-celebration-${controller.state.session}-${controller.feedbackSerial}',
+                  ),
+                  word: result.word!.display,
                 ),
               )
             : Semantics(
