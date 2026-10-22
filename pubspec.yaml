@@ -7,14 +7,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  sqflite: ^2.4.4+2
+  path: ^1.9.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  sqflite_common_ffi: ^2.3.7
+  sqlite3: ^2.9.4
 flutter:
   uses-material-design: true
   assets:
+    - assets/data/daily_levels.json
     - assets/data/levels.json
     - assets/data/lexicon_pt_br.json

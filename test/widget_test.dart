@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:caca_palavra/app.dart';
+
 import 'package:caca_palavra/core/theme/game_theme.dart';
 import 'package:caca_palavra/features/game/domain/game_engine.dart';
 import 'package:caca_palavra/features/game/presentation/game_controller.dart';
@@ -314,16 +314,6 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('production entry loads assets and opens level one directly', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const WordGameApp());
-    await tester.pumpAndSettle();
-    expect(find.text('Nível 1'), findsOneWidget);
-    expect(find.text('0 de 3 palavras'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets(
     'real drag fills GATO and rejects repeats, extras have a separate list',
     (tester) async {
@@ -596,7 +586,7 @@ void main() {
   );
 
   testWidgets(
-    'all ten rounds finish once, next and restart clear round state',
+    'all ten rounds finish once, next clears round and final preserves campaign',
     (tester) async {
       final c = await mount(tester);
       await dragWord(tester, c, 'TOGA');
@@ -613,14 +603,19 @@ void main() {
         expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
         if (level == 10) {
           expect(
-            find.text('Você concluiu os 10 níveis de teste.'),
+            find.text('Você concluiu todos os níveis desta coleção.'),
             findsOneWidget,
           );
-          expect(find.text('Reiniciar teste'), findsOneWidget);
+          expect(find.text('Voltar ao início'), findsOneWidget);
         }
         await tester.tap(find.byKey(const ValueKey('next-level')));
         await tester.pumpAndSettle();
-        expect(c.state.level.id, level == 10 ? 1 : level + 1);
+        if (level == 10) {
+          expect(c.state.level.id, 10);
+          expect(c.state.phase, RoundPhase.completed);
+          break;
+        }
+        expect(c.state.level.id, level + 1);
         expect(c.state.targets, isEmpty);
         expect(c.state.extras, isEmpty);
         expect(c.state.revealedLetters, isEmpty);

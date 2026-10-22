@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/game_theme.dart';
 import '../../domain/game_engine.dart';
+import '../../application/campaign_models.dart';
 import '../game_controller.dart';
 
 class SelectionFeedback extends StatelessWidget {
@@ -17,6 +18,7 @@ class SelectionFeedback extends StatelessWidget {
   static String message(SubmissionResult? result) => switch (result?.kind) {
     SubmissionKind.tooShort => 'Use pelo menos 3 letras.',
     SubmissionKind.targetFound => 'Muito bem!',
+    SubmissionKind.superResolved => 'Palavra resolvida pela Super Dica!',
     SubmissionKind.targetRepeated => 'Você já encontrou essa palavra.',
     SubmissionKind.extraFound => 'Palavra extra: ${result!.word!.display}',
     SubmissionKind.extraRepeated => 'Essa palavra extra já foi encontrada.',
@@ -30,7 +32,9 @@ class SelectionFeedback extends StatelessWidget {
     final error =
         result?.kind == SubmissionKind.unknownWord ||
         result?.kind == SubmissionKind.tooShort;
-    final success = result?.kind == SubmissionKind.targetFound;
+    final success =
+        result?.kind == SubmissionKind.targetFound ||
+        result?.kind == SubmissionKind.superResolved;
     final extra = result?.kind == SubmissionKind.extraFound;
     final celebrating = controller.celebratingExplorer;
     final scale = MediaQuery.textScalerOf(context).scale(1);
@@ -125,6 +129,18 @@ class SelectionFeedback extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                              if (controller.explorerRewardGranted &&
+                                  (celebrating ||
+                                      result?.explorerUnlocked == true))
+                                Text(
+                                  '+${Economy.explorerReward} moedas!',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF795100),
+                                  ),
+                                ),
                               if (extra && !celebrating)
                                 FittedBox(
                                   fit: BoxFit.scaleDown,

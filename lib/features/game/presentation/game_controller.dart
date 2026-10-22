@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import '../domain/game_engine.dart';
+import '../application/game_session_coordinator.dart';
+import '../application/daily_models.dart';
 import 'wheel_gesture.dart';
 
 abstract final class GameTiming {
@@ -29,8 +31,155 @@ class ExtraDiscovery {
 }
 
 class GameController extends ChangeNotifier {
-  GameController(this.engine);
-  final GameEngine engine;
+  GameController(this._fixtureEngine, {this.coordinator, this.onHome});
+  final GameSessionCoordinator? coordinator;
+  final VoidCallback? onHome;
+  bool busy = false;
+  String? saveError;
+  LetterReveal? paidReveal;
+  int get balance => coordinator?.profile.balance ?? 0;
+  bool get explorerRewardGranted =>
+      !isDaily &&
+      (coordinator?.profile.explorerRewardedLevels.contains(state.level.id) ??
+          false);
+  bool shopOpen = false;
+  String? creditMessage;
+  Timer? _calendarTimer;
+  bool get isDaily => coordinator?.mode == GameMode.daily;
+  bool get dailyInvalid => coordinator?.dailyInvalid ?? false;
+  int get completionReward => coordinator?.completionReward ?? 20;
+  Future<void> waitIdle() async {
+    await _active;
+  }
+
+  void scheduleCalendarCheck() {
+    _calendarTimer?.cancel();
+    final time = coordinator!.now();
+    final midnight = DateTime(time.year, time.month, time.day + 1);
+    var delay = midnight.difference(time);
+    if (delay > const Duration(minutes: 1)) delay = const Duration(minutes: 1);
+    if (delay <= Duration.zero) delay = const Duration(milliseconds: 1);
+    _calendarTimer = Timer(delay, () async {
+      await refreshCalendar();
+      if (!_disposed) scheduleCalendarCheck();
+    });
+  }
+
+  Future<void> refreshCalendar() async {
+    await waitIdle();
+    if (_disposed || coordinator == null) return;
+    try {
+      await coordinator!.refreshDaily();
+      if (dailyInvalid) {
+        cancelGesture(notify: false);
+        clearCollectionEffects(notify: false);
+        feedback = null;
+      }
+    } catch (_) {
+      saveError =
+          'Não foi possível atualizar o desafio diário. Tente novamente.';
+    }
+    refresh();
+  }
+
+  Future<SuperHintOutcome?> buySuperHint(String id, RoundContext? expected) =>
+      run(() async {
+        final result = await coordinator!.purchaseSuperHint(
+          operationId: id,
+          expected: expected,
+        );
+        if (result.submission != null) _accept(result.submission!);
+        return result;
+      });
+  Future<Map<String, dynamic>?> credit(
+    Future<Map<String, dynamic>> Function() command,
+  ) async {
+    final result = await run(() async {
+      final saved = await command();
+      _showCredit(saved);
+      return saved;
+    });
+    if (result == null && saveError != null) {
+      saveError = 'Não foi possível adicionar as moedas. Tente novamente.';
+      refresh();
+    }
+    return result;
+  }
+
+  void _showCredit(Map<String, dynamic> result) {
+    creditMessage = result['source'] == 'simulated_purchase'
+        ? 'Compra simulada: +${result['amount']} moedas. Nenhuma cobrança realizada.'
+        : '+${result['amount']} moedas adicionadas pela simulação.';
+  }
+
+  bool get lastLevel => state.level.id == engine.levels.last.id;
+  Future<void>? _active;
+  Future<T?> run<T>(Future<T> Function() action) async {
+    if (busy) return null;
+    busy = true;
+    saveError = null;
+    refresh();
+    final done = Completer<void>();
+    _active = done.future;
+    try {
+      return await action();
+    } on DailyExpired {
+      cancelGesture(notify: false);
+      clearCollectionEffects(notify: false);
+      feedback = null;
+      return null;
+    } on ClockReversed {
+      return null;
+    } catch (_) {
+      saveError = 'Não foi possível salvar seu progresso. Tente novamente.';
+      return null;
+    } finally {
+      busy = false;
+      done.complete();
+      _active = null;
+      refresh();
+    }
+  }
+
+  Future<void> retrySave() async {
+    await run(() async {
+      final result = await coordinator!.retry();
+      if (result?['kind'] == 'submission' || result?['kind'] == 'super_hint') {
+        _accept(submissionFromJson(result!));
+      }
+      if (result?['kind'] == 'hint') {
+        paidReveal = revealFromJson(result!['reveal']);
+        feedbackSerial++;
+      }
+      if (result?['kind'] == 'shop') _showCredit(result!);
+      if (result?['kind'] == 'advance') _clearRound();
+      if (result?['home'] == true) onHome?.call();
+    });
+  }
+
+  Future<HintOutcome?> buyHint(String id, {RoundContext? expected}) =>
+      run(() async {
+        final result = await coordinator!.purchaseHint(
+          operationId: id,
+          expected: expected,
+        );
+        paidReveal = result.reveal;
+        feedbackSerial++;
+        return result;
+      });
+  Future<void> leaveToHome() async {
+    if (dragging) {
+      cancelGesture();
+      return;
+    }
+    await _active;
+    if (saveError != null) return;
+    detach();
+    onHome?.call();
+  }
+
+  final GameEngine _fixtureEngine;
+  GameEngine get engine => coordinator?.engine ?? _fixtureEngine;
   final WheelGesture gesture = WheelGesture();
   WheelGeometry? _geometry;
   Timer? _feedbackTimer;
@@ -48,7 +197,13 @@ class GameController extends ChangeNotifier {
   int feedbackSerial = 0;
   GameState get state => engine.state;
   bool get dragging => gesture.dragging;
-  bool get interactive => state.phase == RoundPhase.playing && !shuffling;
+  bool get interactive =>
+      state.phase == RoundPhase.playing &&
+      !shuffling &&
+      !dailyInvalid &&
+      !shopOpen &&
+      !busy &&
+      saveError == null;
   String get preview {
     final tiles = {for (final tile in state.level.tiles) tile.id: tile.letter};
     return gesture.selected.map((id) => tiles[id] ?? '').join();
@@ -72,6 +227,7 @@ class GameController extends ChangeNotifier {
       celebratingExplorer = false;
       _feedbackTimer?.cancel();
       feedback = null;
+      paidReveal = null;
       notifyListeners();
     }
   }
@@ -87,7 +243,20 @@ class GameController extends ChangeNotifier {
     move(pointer, position);
     final ids = gesture.up(pointer);
     if (ids == null) return;
-    final result = engine.submit(ids, session: state.session);
+    if (coordinator != null) {
+      final session = state.session;
+      unawaited(
+        run(() async {
+          _accept(await coordinator!.submitWord(ids, session: session));
+        }),
+      );
+      return;
+    }
+    _accept(engine.submit(ids, session: state.session));
+  }
+
+  void _accept(SubmissionResult result) {
+    if (_disposed) return;
     if (result.kind == SubmissionKind.extraFound) {
       _discoveries.add(
         ExtraDiscovery(
@@ -158,7 +327,20 @@ class GameController extends ChangeNotifier {
 
   void shuffle({bool reduceMotion = false}) {
     if (!interactive || dragging) return;
+    if (coordinator != null) {
+      unawaited(
+        run(() async {
+          if (await coordinator!.shuffle()) _animateShuffle(reduceMotion);
+        }),
+      );
+      return;
+    }
     if (!engine.shuffle(dragging: dragging)) return;
+    _animateShuffle(reduceMotion);
+  }
+
+  void _animateShuffle(bool reduceMotion) {
+    if (_disposed) return;
     _geometry = null;
     shuffling = !reduceMotion;
     _shuffleTimer?.cancel();
@@ -173,9 +355,32 @@ class GameController extends ChangeNotifier {
 
   void nextLevel() {
     if (state.phase != RoundPhase.completed) return;
-    final next = state.level.id == engine.levels.length
-        ? 1
-        : state.level.id + 1;
+    if (busy || saveError != null) return;
+    if (coordinator != null) {
+      unawaited(
+        run(() async {
+          final next = await coordinator!.advance();
+          _clearRound();
+          if (!next) onHome?.call();
+        }),
+      );
+      return;
+    }
+    final index = engine.levels.indexWhere(
+      (level) => level.id == state.level.id,
+    );
+    if (index + 1 == engine.levels.length) {
+      onHome?.call();
+      return;
+    }
+    engine.startLevel(engine.levels[index + 1].id);
+    _clearRound();
+    refresh();
+  }
+
+  void resetView() => _clearRound();
+  void _clearRound() {
+    if (_disposed) return;
     _cancelTimers();
     gesture.cancel();
     _geometry = null;
@@ -183,7 +388,7 @@ class GameController extends ChangeNotifier {
     shuffling = false;
     clearCollectionEffects(notify: false);
     collectedSerial = 0;
-    engine.startLevel(next);
+    paidReveal = null;
     notifyListeners();
   }
 
@@ -204,6 +409,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _calendarTimer?.cancel();
     _cancelTimers();
     gesture.cancel();
     _discoveries.clear();
