@@ -5,6 +5,8 @@ import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
 import '../application/campaign_models.dart';
+import '../application/daily_models.dart';
+import '../application/shop_models.dart';
 import '../domain/game_engine.dart';
 import '../domain/round_snapshot.dart';
 import 'game_data.dart';
@@ -12,6 +14,7 @@ import 'game_data.dart';
 enum StorageFaultPoint {
   beforeLedger,
   afterLedger,
+  afterLedgerEntry,
   beforeProfile,
   beforeCommit,
   afterCommit,
@@ -31,7 +34,7 @@ abstract interface class ProgressRepository {
 }
 
 class LocalGameDatabase {
-  static const version = 2;
+  static const version = 3;
   static Future<Database> open({
     DatabaseFactory? factory,
     String? databasePath,
@@ -53,12 +56,25 @@ class LocalGameDatabase {
             'CREATE TABLE profiles (profile_id TEXT PRIMARY KEY, balance INTEGER NOT NULL CHECK(balance >= 0), revision INTEGER NOT NULL, payload_json TEXT NOT NULL)',
           );
           await db.execute(
-            'CREATE TABLE coin_transactions (operation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL REFERENCES profiles(profile_id), kind TEXT NOT NULL, amount INTEGER NOT NULL, level_id INTEGER, round_id TEXT, metadata_json TEXT NOT NULL, created_at TEXT NOT NULL)',
+            'CREATE TABLE coin_transactions (operation_id TEXT PRIMARY KEY, profile_id TEXT NOT NULL REFERENCES profiles(profile_id), kind TEXT NOT NULL, amount INTEGER NOT NULL, level_id INTEGER, round_id TEXT, metadata_json TEXT NOT NULL, created_at TEXT NOT NULL, parent_operation_id TEXT NOT NULL)',
           );
           await createRequests(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
           if (oldVersion < 2) await createRequests(db);
+          if (oldVersion < 3) {
+            final columns = await db.rawQuery(
+              'PRAGMA table_info(coin_transactions)',
+            );
+            if (!columns.any((c) => c['name'] == 'parent_operation_id')) {
+              await db.execute(
+                'ALTER TABLE coin_transactions ADD COLUMN parent_operation_id TEXT',
+              );
+              await db.execute(
+                'UPDATE coin_transactions SET parent_operation_id = operation_id',
+              );
+            }
+          }
         },
       ),
     );
@@ -78,6 +94,7 @@ class SqliteProgressRepository implements ProgressRepository {
   final Database database;
   final int initialBalance;
   StorageFault? fault;
+  DateTime Function() now = DateTime.now;
   static Future<SqliteProgressRepository> open({
     DatabaseFactory? factory,
     String? databasePath,
@@ -117,6 +134,7 @@ class SqliteProgressRepository implements ProgressRepository {
       });
       await txn.insert('coin_transactions', {
         'operation_id': 'welcome:v1',
+        'parent_operation_id': 'welcome:v1',
         'profile_id': 'local',
         'kind': 'welcome',
         'amount': initialBalance,
@@ -248,31 +266,99 @@ class SqliteProgressRepository implements ProgressRepository {
         profile.completed.length < profile.catalogIds.length) {
       invalid('resultado não reconhecido ausente');
     }
+    if (profile.lastDailyDate != null) {
+      parseCalendarDate(profile.lastDailyDate!);
+    }
+    final dailyCompleted = <String>{};
+    final allRounds = <({RoundSnapshot round, String mode, String? date})>[
+      for (final round in profile.rounds.values)
+        (round: round, mode: 'campaign', date: null),
+    ];
+    for (final entry in profile.daily.entries) {
+      final day = entry.value;
+      parseCalendarDate(day.date);
+      if (entry.key != day.date ||
+          profile.lastDailyDate == null ||
+          day.date.compareTo(profile.lastDailyDate!) > 0 ||
+          day.catalogVersion < 1 ||
+          !roundIds.add(day.round.roundId) ||
+          (day.pendingResult && !day.completed) ||
+          (day.expired && day.completed)) {
+        invalid('histórico diário inconsistente');
+      }
+      GameData.validateLevel(day.definition, day.lexicon);
+      GameEngine(
+        levels: [day.definition],
+        lexicon: day.lexicon,
+      ).restoreRound(day.round);
+      if (day.completed) dailyCompleted.add(day.date);
+      allRounds.add((round: day.round, mode: 'daily', date: day.date));
+    }
     final ledger = await db.query(
       'coin_transactions',
       where: 'profile_id = ?',
       whereArgs: ['local'],
     );
-    var sum = 0;
-    var welcome = 0;
-    final rewards = <int>{};
-    final explorerRewards = <int>{};
-    final paid = <String, RevealRecord>{};
-    final paidLevels = <String, int>{};
-    for (final round in profile.rounds.values) {
-      for (final reveal in round.reveals.where(
+    final rewards = <int>{}, explorerRewards = <int>{};
+    final dailyRewards = <String>{},
+        paidLedger = <String>{},
+        superLedger = <String>{};
+    final paid =
+        <
+          String,
+          ({
+            RevealRecord reveal,
+            RoundSnapshot round,
+            String mode,
+            String? date,
+          })
+        >{};
+    final supers =
+        <
+          String,
+          ({
+            SuperResolution resolution,
+            RoundSnapshot round,
+            String mode,
+            String? date,
+          })
+        >{};
+    for (final scope in allRounds) {
+      for (final r in scope.round.reveals.where(
         (r) => r.source == RevealSource.paid,
       )) {
-        if (paid.containsKey(reveal.sourceKey)) invalid('dica paga duplicada');
-        paid[reveal.sourceKey] = reveal;
-        paidLevels[reveal.sourceKey] = round.levelId;
+        if (paid.containsKey(r.sourceKey)) invalid('dica paga duplicada');
+        paid[r.sourceKey] = (
+          reveal: r,
+          round: scope.round,
+          mode: scope.mode,
+          date: scope.date,
+        );
+      }
+      for (final r in scope.round.superHints) {
+        if (supers.containsKey(r.operationId)) invalid('Super Dica duplicada');
+        supers[r.operationId] = (
+          resolution: r,
+          round: scope.round,
+          mode: scope.mode,
+          date: scope.date,
+        );
       }
     }
-    final paidLedger = <String>{};
+    var sum = 0, welcome = 0;
     for (final row in ledger) {
-      final amount = row['amount'] as int;
+      final amount = row['amount'] as int, id = row['operation_id'] as String;
+      final parent = row['parent_operation_id'] as String?;
+      if (parent == null || parent.isEmpty) {
+        invalid('operação financeira sem vínculo');
+      }
       sum += amount;
-      final id = row['operation_id'] as String;
+      final metadata = Map<String, dynamic>.from(
+        jsonDecode(row['metadata_json'] as String) as Map,
+      );
+      final request = Map<String, dynamic>.from(metadata['request'] as Map);
+      final result = Map<String, dynamic>.from(metadata['result'] as Map);
+      final mode = request['mode'] ?? 'campaign';
       switch (row['kind']) {
         case 'welcome':
           if (id != 'welcome:v1' || amount < 0) {
@@ -281,7 +367,8 @@ class SqliteProgressRepository implements ProgressRepository {
           welcome++;
         case 'level_completion':
           final level = row['level_id'] as int;
-          if (id != 'level-completion:$level' ||
+          if (mode != 'campaign' ||
+              id != 'level-completion:$level' ||
               amount != Economy.levelReward ||
               !profile.completed.contains(level) ||
               row['round_id'] != profile.rounds[level]?.roundId ||
@@ -291,13 +378,24 @@ class SqliteProgressRepository implements ProgressRepository {
           if (completion?.levelId == level && completion!.reward != amount) {
             invalid('recompensa pendente inválida');
           }
+        case 'daily_completion':
+          final date = request['date'] as String?;
+          if (mode != 'daily' ||
+              date == null ||
+              id != 'daily-completion:$date' ||
+              amount != Economy.dailyReward ||
+              !dailyCompleted.contains(date) ||
+              row['round_id'] != profile.daily[date]?.round.roundId ||
+              !dailyRewards.add(date)) {
+            invalid('recompensa diária inválida');
+          }
         case 'explorer_reward':
-          final level = row['level_id'] as int;
-          final round = profile.rounds[level];
+          final level = row['level_id'] as int, round = profile.rounds[level];
           final definition = data.levels
               .where((l) => l.id == level)
               .firstOrNull;
-          if (id != 'explorer-reward:$level' ||
+          if (mode != 'campaign' ||
+              id != 'explorer-reward:$level' ||
               amount != Economy.explorerReward ||
               !profile.explorerRewardedLevels.contains(level) ||
               round == null ||
@@ -308,24 +406,52 @@ class SqliteProgressRepository implements ProgressRepository {
             invalid('recompensa de Explorador inconsistente');
           }
         case 'paid_hint':
-          final reveal = paid[id];
+          final source = paid[parent];
           if (amount != -Economy.hintPrice ||
-              reveal == null ||
-              paidLevels[id] != row['level_id'] ||
-              row['round_id'] != profile.rounds[row['level_id']]?.roundId) {
+              source == null ||
+              mode != source.mode ||
+              request['date'] != source.date ||
+              row['round_id'] != source.round.roundId ||
+              row['level_id'] != source.round.levelId) {
             invalid('dica sem débito ou revelação');
           }
-          final metadata = Map<String, dynamic>.from(
-            jsonDecode(row['metadata_json'] as String) as Map,
-          );
-          final saved = Map<String, dynamic>.from(
-            (metadata['result'] as Map)['reveal'] as Map,
-          );
-          if (saved['targetKey'] != reveal!.targetKey ||
-              saved['index'] != reveal.index) {
+          final saved = Map<String, dynamic>.from(result['reveal'] as Map);
+          if (saved['targetKey'] != source!.reveal.targetKey ||
+              saved['index'] != source.reveal.index ||
+              !paidLedger.add(parent!)) {
             invalid('posição de dica inconsistente');
           }
-          paidLedger.add(id);
+        case 'super_hint':
+          final source = supers[parent];
+          if (amount != -Economy.superHintPrice ||
+              source == null ||
+              mode != source.mode ||
+              request['date'] != source.date ||
+              row['round_id'] != source.round.roundId ||
+              row['level_id'] != source.round.levelId ||
+              result['targetKey'] != source.resolution.targetKey ||
+              canonicalJson(result['indices']) !=
+                  canonicalJson(source.resolution.indices) ||
+              !superLedger.add(parent!)) {
+            invalid('resolução de Super Dica inconsistente');
+          }
+        case 'simulated_purchase':
+          if (request['simulated'] != true ||
+              result['simulated'] != true ||
+              result['source'] != 'simulated_purchase' ||
+              amount !=
+                  ShopCatalog.find(request['packageId'] as String).amount ||
+              result['amount'] != amount) {
+            invalid('compra simulada inconsistente');
+          }
+        case 'simulated_ad':
+          if (request['simulated'] != true ||
+              result['simulated'] != true ||
+              result['source'] != 'simulated_ad' ||
+              amount != Economy.adReward ||
+              result['amount'] != amount) {
+            invalid('anúncio simulado inconsistente');
+          }
         default:
           invalid('tipo de transação desconhecido');
       }
@@ -334,7 +460,9 @@ class SqliteProgressRepository implements ProgressRepository {
         welcome != 1 ||
         rewards.length != profile.completed.length ||
         explorerRewards.length != profile.explorerRewardedLevels.length ||
-        paidLedger.length != paid.length) {
+        dailyRewards.length != dailyCompleted.length ||
+        paidLedger.length != paid.length ||
+        superLedger.length != supers.length) {
       invalid('carteira divergente do histórico');
     }
   }
@@ -402,15 +530,27 @@ class SqliteProgressRepository implements ProgressRepository {
         throw RevisionConflict();
       }
       if (proposal.profile.balance !=
-          current.balance + (proposal.coin?.amount ?? 0)) {
+          current.balance +
+              proposal.entries.fold<int>(0, (sum, c) => sum + c.amount)) {
         throw const FormatException('Saldo da proposta inválido.');
       }
+      if (proposal.request['mode'] == 'daily' &&
+          proposal.request['date'] != calendarDate(now())) {
+        throw DailyExpired();
+      }
+      final price = switch (proposal.request['kind']) {
+        'paid_hint' => Economy.hintPrice,
+        'super_hint' => Economy.superHintPrice,
+        _ => 0,
+      };
+      if (current.balance < price) {
+        throw const FormatException('Saldo anterior insuficiente.');
+      }
       await fault?.call(StorageFaultPoint.beforeLedger);
-      final coin = proposal.coin;
-      if (coin != null) {
-        if (coin.id != proposal.id) throw OperationMismatch();
+      for (final coin in proposal.entries) {
         await txn.insert('coin_transactions', {
           'operation_id': coin.id,
+          'parent_operation_id': proposal.id,
           'profile_id': 'local',
           'kind': coin.kind,
           'amount': coin.amount,
@@ -422,6 +562,7 @@ class SqliteProgressRepository implements ProgressRepository {
           }),
           'created_at': DateTime.now().toUtc().toIso8601String(),
         });
+        await fault?.call(StorageFaultPoint.afterLedgerEntry);
       }
       await fault?.call(StorageFaultPoint.afterLedger);
       await fault?.call(StorageFaultPoint.beforeProfile);

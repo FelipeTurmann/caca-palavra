@@ -81,7 +81,7 @@ void main() {
       expect(find.byKey(const ValueKey('confirm-hint')), findsNothing);
       expect(find.textContaining('anúncio'), findsNothing);
       expect(c.profile.balance, 29);
-      await tester.tap(find.text('Voltar ao jogo'));
+      await tester.tap(find.text('Agora não'));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
     },

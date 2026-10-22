@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../domain/game_engine.dart';
 import '../application/game_session_coordinator.dart';
+import '../application/daily_models.dart';
 import 'wheel_gesture.dart';
 
 abstract final class GameTiming {
@@ -30,7 +31,7 @@ class ExtraDiscovery {
 }
 
 class GameController extends ChangeNotifier {
-  GameController(this.engine, {this.coordinator, this.onHome});
+  GameController(this._fixtureEngine, {this.coordinator, this.onHome});
   final GameSessionCoordinator? coordinator;
   final VoidCallback? onHome;
   bool busy = false;
@@ -38,8 +39,79 @@ class GameController extends ChangeNotifier {
   LetterReveal? paidReveal;
   int get balance => coordinator?.profile.balance ?? 0;
   bool get explorerRewardGranted =>
-      coordinator?.profile.explorerRewardedLevels.contains(state.level.id) ??
-      false;
+      !isDaily &&
+      (coordinator?.profile.explorerRewardedLevels.contains(state.level.id) ??
+          false);
+  bool shopOpen = false;
+  String? creditMessage;
+  Timer? _calendarTimer;
+  bool get isDaily => coordinator?.mode == GameMode.daily;
+  bool get dailyInvalid => coordinator?.dailyInvalid ?? false;
+  int get completionReward => coordinator?.completionReward ?? 20;
+  Future<void> waitIdle() async {
+    await _active;
+  }
+
+  void scheduleCalendarCheck() {
+    _calendarTimer?.cancel();
+    final time = coordinator!.now();
+    final midnight = DateTime(time.year, time.month, time.day + 1);
+    var delay = midnight.difference(time);
+    if (delay > const Duration(minutes: 1)) delay = const Duration(minutes: 1);
+    if (delay <= Duration.zero) delay = const Duration(milliseconds: 1);
+    _calendarTimer = Timer(delay, () async {
+      await refreshCalendar();
+      if (!_disposed) scheduleCalendarCheck();
+    });
+  }
+
+  Future<void> refreshCalendar() async {
+    await waitIdle();
+    if (_disposed || coordinator == null) return;
+    try {
+      await coordinator!.refreshDaily();
+      if (dailyInvalid) {
+        cancelGesture(notify: false);
+        clearCollectionEffects(notify: false);
+        feedback = null;
+      }
+    } catch (_) {
+      saveError =
+          'Não foi possível atualizar o desafio diário. Tente novamente.';
+    }
+    refresh();
+  }
+
+  Future<SuperHintOutcome?> buySuperHint(String id, RoundContext? expected) =>
+      run(() async {
+        final result = await coordinator!.purchaseSuperHint(
+          operationId: id,
+          expected: expected,
+        );
+        if (result.submission != null) _accept(result.submission!);
+        return result;
+      });
+  Future<Map<String, dynamic>?> credit(
+    Future<Map<String, dynamic>> Function() command,
+  ) async {
+    final result = await run(() async {
+      final saved = await command();
+      _showCredit(saved);
+      return saved;
+    });
+    if (result == null && saveError != null) {
+      saveError = 'Não foi possível adicionar as moedas. Tente novamente.';
+      refresh();
+    }
+    return result;
+  }
+
+  void _showCredit(Map<String, dynamic> result) {
+    creditMessage = result['source'] == 'simulated_purchase'
+        ? 'Compra simulada: +${result['amount']} moedas. Nenhuma cobrança realizada.'
+        : '+${result['amount']} moedas adicionadas pela simulação.';
+  }
+
   bool get lastLevel => state.level.id == engine.levels.last.id;
   Future<void>? _active;
   Future<T?> run<T>(Future<T> Function() action) async {
@@ -51,6 +123,13 @@ class GameController extends ChangeNotifier {
     _active = done.future;
     try {
       return await action();
+    } on DailyExpired {
+      cancelGesture(notify: false);
+      clearCollectionEffects(notify: false);
+      feedback = null;
+      return null;
+    } on ClockReversed {
+      return null;
     } catch (_) {
       saveError = 'Não foi possível salvar seu progresso. Tente novamente.';
       return null;
@@ -65,22 +144,29 @@ class GameController extends ChangeNotifier {
   Future<void> retrySave() async {
     await run(() async {
       final result = await coordinator!.retry();
-      if (result?['kind'] == 'submission') _accept(submissionFromJson(result!));
+      if (result?['kind'] == 'submission' || result?['kind'] == 'super_hint') {
+        _accept(submissionFromJson(result!));
+      }
       if (result?['kind'] == 'hint') {
         paidReveal = revealFromJson(result!['reveal']);
         feedbackSerial++;
       }
+      if (result?['kind'] == 'shop') _showCredit(result!);
       if (result?['kind'] == 'advance') _clearRound();
       if (result?['home'] == true) onHome?.call();
     });
   }
 
-  Future<HintOutcome?> buyHint(String id) => run(() async {
-    final result = await coordinator!.purchaseHint(operationId: id);
-    paidReveal = result.reveal;
-    feedbackSerial++;
-    return result;
-  });
+  Future<HintOutcome?> buyHint(String id, {RoundContext? expected}) =>
+      run(() async {
+        final result = await coordinator!.purchaseHint(
+          operationId: id,
+          expected: expected,
+        );
+        paidReveal = result.reveal;
+        feedbackSerial++;
+        return result;
+      });
   Future<void> leaveToHome() async {
     if (dragging) {
       cancelGesture();
@@ -92,7 +178,8 @@ class GameController extends ChangeNotifier {
     onHome?.call();
   }
 
-  final GameEngine engine;
+  final GameEngine _fixtureEngine;
+  GameEngine get engine => coordinator?.engine ?? _fixtureEngine;
   final WheelGesture gesture = WheelGesture();
   WheelGeometry? _geometry;
   Timer? _feedbackTimer;
@@ -113,6 +200,8 @@ class GameController extends ChangeNotifier {
   bool get interactive =>
       state.phase == RoundPhase.playing &&
       !shuffling &&
+      !dailyInvalid &&
+      !shopOpen &&
       !busy &&
       saveError == null;
   String get preview {
@@ -289,6 +378,7 @@ class GameController extends ChangeNotifier {
     refresh();
   }
 
+  void resetView() => _clearRound();
   void _clearRound() {
     if (_disposed) return;
     _cancelTimers();
@@ -319,6 +409,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _calendarTimer?.cancel();
     _cancelTimers();
     gesture.cancel();
     _discoveries.clear();

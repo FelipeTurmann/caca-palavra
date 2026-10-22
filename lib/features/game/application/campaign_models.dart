@@ -1,12 +1,16 @@
 import 'dart:convert';
 
 import '../domain/round_snapshot.dart';
+import 'daily_models.dart';
 
 abstract final class Economy {
   static const initialBalance = 60;
   static const levelReward = 20;
   static const explorerReward = 10;
   static const hintPrice = 30;
+  static const superHintPrice = 100;
+  static const dailyReward = 50;
+  static const adReward = 15;
 }
 
 String canonicalJson(Object? value) {
@@ -57,11 +61,14 @@ class CampaignProfile {
     this.catalogVersion = 1,
     this.hasStarted = false,
     this.pendingCompletion,
+    Map<String, DailyProgress> daily = const {},
+    this.lastDailyDate,
   }) : catalogIds = List.unmodifiable(catalogIds),
        unlocked = Set.unmodifiable(unlocked),
        completed = Set.unmodifiable(completed),
        explorerRewardedLevels = Set.unmodifiable(explorerRewardedLevels),
-       rounds = Map.unmodifiable(rounds);
+       rounds = Map.unmodifiable(rounds),
+       daily = Map.unmodifiable(daily);
   final int balance;
   final int revision;
   final int currentLevelId;
@@ -73,6 +80,8 @@ class CampaignProfile {
   final Set<int> explorerRewardedLevels;
   final Map<int, RoundSnapshot> rounds;
   final PendingCompletion? pendingCompletion;
+  final Map<String, DailyProgress> daily;
+  final String? lastDailyDate;
   RoundSnapshot? get currentRound => rounds[currentLevelId];
   bool get campaignComplete =>
       completed.length == catalogIds.length && pendingCompletion == null;
@@ -89,7 +98,11 @@ class CampaignProfile {
     Map<int, RoundSnapshot>? rounds,
     PendingCompletion? pendingCompletion,
     bool clearPending = false,
+    Map<String, DailyProgress>? daily,
+    String? lastDailyDate,
   }) => CampaignProfile(
+    daily: daily ?? this.daily,
+    lastDailyDate: lastDailyDate ?? this.lastDailyDate,
     balance: balance ?? this.balance,
     revision: revision ?? this.revision,
     currentLevelId: currentLevelId ?? this.currentLevelId,
@@ -106,7 +119,11 @@ class CampaignProfile {
         : pendingCompletion ?? this.pendingCompletion,
   );
   Map<String, Object?> toPayload() => {
-    'schemaVersion': 1,
+    'schemaVersion': 2,
+    'daily': {
+      for (final entry in daily.entries) entry.key: entry.value.toJson(),
+    },
+    'lastDailyDate': lastDailyDate,
     'catalogVersion': catalogVersion,
     'catalogIds': catalogIds,
     'hasStarted': hasStarted,
@@ -124,7 +141,7 @@ class CampaignProfile {
     int revision,
     Map<String, dynamic> payload,
   ) {
-    if (payload['schemaVersion'] != 1) {
+    if (![1, 2].contains(payload['schemaVersion'])) {
       throw const FormatException(
         'Versão de progresso incompatível. Seus dados foram preservados.',
       );
@@ -144,6 +161,14 @@ class CampaignProfile {
       throw const FormatException('Progresso duplicado.');
     }
     return CampaignProfile(
+      daily: {
+        for (final entry
+            in (payload['daily'] as Map<String, dynamic>? ?? {}).entries)
+          entry.key: DailyProgress.fromJson(
+            Map<String, dynamic>.from(entry.value as Map),
+          ),
+      },
+      lastDailyDate: payload['lastDailyDate'] as String?,
       balance: balance,
       revision: revision,
       currentLevelId: payload['currentLevelId'] as int,
@@ -205,6 +230,7 @@ class SaveProposal {
     required this.profile,
     required this.result,
     this.coin,
+    this.coins = const [],
   });
   final String id;
   final int expectedRevision;
@@ -212,6 +238,8 @@ class SaveProposal {
   final CampaignProfile profile;
   final Map<String, dynamic> result;
   final CoinOperation? coin;
+  final List<CoinOperation> coins;
+  List<CoinOperation> get entries => [?coin, ...coins];
   Map<String, Object?> toJson() => {
     'id': id,
     'expectedRevision': expectedRevision,
@@ -221,8 +249,12 @@ class SaveProposal {
     'revision': profile.revision,
     'result': result,
     'coin': coin?.toJson(),
+    'coins': coins.map((c) => c.toJson()).toList(),
   };
   factory SaveProposal.fromJson(Map<String, dynamic> json) => SaveProposal(
+    coins: (json['coins'] as List? ?? const [])
+        .map((c) => CoinOperation.fromJson(Map<String, dynamic>.from(c as Map)))
+        .toList(),
     id: json['id'] as String,
     expectedRevision: json['expectedRevision'] as int,
     request: Map<String, dynamic>.from(json['request'] as Map),

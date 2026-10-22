@@ -173,8 +173,9 @@ class ExtrasSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       ExplorerProgress(state: state),
-                      if (controller.explorerRewardGranted ||
-                          !state.explorerUnlocked) ...[
+                      if (!controller.isDaily &&
+                          (controller.explorerRewardGranted ||
+                              !state.explorerUnlocked)) ...[
                         const SizedBox(height: 12),
                         Text(
                           controller.explorerRewardGranted

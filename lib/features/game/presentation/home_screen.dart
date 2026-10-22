@@ -1,21 +1,36 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/game_theme.dart';
 import 'game_controller.dart';
+import 'shop_screen.dart';
 
 class WalletBadge extends StatelessWidget {
-  const WalletBadge({super.key, required this.balance});
+  const WalletBadge({super.key, required this.balance, this.onPressed});
+  final VoidCallback? onPressed;
   final int balance;
   @override
   Widget build(BuildContext context) => Semantics(
-    label: '$balance moedas',
+    label: onPressed == null
+        ? '$balance moedas'
+        : '$balance moedas. Abrir loja',
+    button: onPressed != null,
+    onTap: onPressed,
     excludeSemantics: true,
-    child: Chip(
-      avatar: const Icon(
-        Icons.monetization_on_rounded,
-        color: Color(0xFFAE7412),
-      ),
-      label: Text('$balance moedas'),
-    ),
+    child: onPressed != null
+        ? ActionChip(
+            onPressed: onPressed,
+            avatar: const Icon(
+              Icons.monetization_on_rounded,
+              color: Color(0xFFAE7412),
+            ),
+            label: Text('$balance moedas'),
+          )
+        : Chip(
+            avatar: const Icon(
+              Icons.monetization_on_rounded,
+              color: Color(0xFFAE7412),
+            ),
+            label: Text('$balance moedas'),
+          ),
   );
 }
 
@@ -51,7 +66,13 @@ class SaveStatus extends StatelessWidget {
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.controller, required this.onPlay});
+  const HomeScreen({
+    super.key,
+    required this.controller,
+    required this.onPlay,
+    this.onDaily,
+  });
+  final VoidCallback? onDaily;
   final GameController controller;
   final VoidCallback onPlay;
   @override
@@ -96,7 +117,10 @@ class HomeScreen extends StatelessWidget {
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 24),
-                          WalletBadge(balance: profile.balance),
+                          WalletBadge(
+                            balance: profile.balance,
+                            onPressed: () => openShop(context, controller),
+                          ),
                           Text(
                             '${profile.completed.length} de ${profile.catalogIds.length} níveis concluídos',
                             textAlign: TextAlign.center,
@@ -126,6 +150,74 @@ class HomeScreen extends StatelessWidget {
                                 child: Text(label, textAlign: TextAlign.center),
                               ),
                             ),
+                          const SizedBox(height: 20),
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    'Desafio diário',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge,
+                                  ),
+                                  Text(controller.coordinator!.today),
+                                  if (controller.coordinator!.clockReversed)
+                                    const Text(
+                                      'Ajuste a data do aparelho para acessar o desafio diário.',
+                                    )
+                                  else if (controller
+                                              .coordinator!
+                                              .todayProgress
+                                              ?.completed ==
+                                          true &&
+                                      controller
+                                              .coordinator!
+                                              .todayProgress
+                                              ?.pendingResult ==
+                                          false) ...[
+                                    const Text('Desafio de hoje concluído'),
+                                    const Text(
+                                      'Você já recebeu 50 moedas hoje.',
+                                    ),
+                                  ] else ...[
+                                    if (controller.coordinator!.todayProgress !=
+                                        null)
+                                      Text(
+                                        '${controller.coordinator!.todayProgress!.round.targets.length} de ${controller.coordinator!.todayProgress!.definition.words.length} palavras',
+                                      ),
+                                    const Text(
+                                      'Ganhe 50 moedas ao concluir. O desafio muda à meia-noite do seu aparelho e o progresso incompleto expira.',
+                                    ),
+                                    FilledButton(
+                                      key: const ValueKey('daily-play'),
+                                      onPressed:
+                                          controller.busy ||
+                                              controller.saveError != null
+                                          ? null
+                                          : onDaily,
+                                      child: Text(
+                                        controller
+                                                    .coordinator!
+                                                    .todayProgress
+                                                    ?.pendingResult ==
+                                                true
+                                            ? 'Ver resultado'
+                                            : controller
+                                                      .coordinator!
+                                                      .todayProgress !=
+                                                  null
+                                            ? 'Continuar desafio'
+                                            : 'Jogar desafio',
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
                           SaveStatus(controller: controller),
                         ],
                       ),

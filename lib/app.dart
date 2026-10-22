@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/theme/game_theme.dart';
 import 'features/game/application/game_session_coordinator.dart';
 import 'features/game/data/game_data.dart';
+import 'features/game/data/daily_catalog.dart';
 import 'features/game/data/progress_repository.dart';
 import 'features/game/presentation/game_controller.dart';
 import 'features/game/presentation/game_screen.dart';
@@ -12,7 +13,11 @@ Future<GameSessionCoordinator> loadGame() async {
   final data = await GameData.load();
   final repository = await SqliteProgressRepository.open();
   try {
-    return await GameSessionCoordinator.create(data, repository);
+    return await GameSessionCoordinator.create(
+      data,
+      repository,
+      dailyCatalog: await DailyCatalog.load(),
+    );
   } catch (_) {
     await repository.close();
     rethrow;
@@ -26,7 +31,18 @@ class WordGameApp extends StatefulWidget {
   State<WordGameApp> createState() => _WordGameAppState();
 }
 
-class _WordGameAppState extends State<WordGameApp> {
+class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loaded?.refreshCalendar();
+  }
+
   late Future<GameController> _loading = _load();
   GameController? _loaded;
   bool _playing = false;
@@ -44,6 +60,7 @@ class _WordGameAppState extends State<WordGameApp> {
       await session.close();
     } else {
       _loaded = controller;
+      controller.scheduleCalendarCheck();
     }
     return controller;
   }
@@ -56,8 +73,17 @@ class _WordGameAppState extends State<WordGameApp> {
     if (opened == true && mounted) setState(() => _playing = true);
   }
 
+  Future<void> _daily(GameController controller) async {
+    final opened = await controller.run(() async {
+      await controller.coordinator!.startDaily();
+      return true;
+    });
+    if (opened == true && mounted) setState(() => _playing = true);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _loaded?.dispose();
     if (_loaded != null) unawaited(_loaded!.coordinator!.close());
     super.dispose();
@@ -114,6 +140,7 @@ class _WordGameAppState extends State<WordGameApp> {
             : HomeScreen(
                 controller: controller,
                 onPlay: () => _play(controller),
+                onDaily: () => _daily(controller),
               );
       },
     ),

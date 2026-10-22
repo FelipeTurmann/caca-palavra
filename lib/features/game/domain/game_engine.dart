@@ -59,6 +59,7 @@ enum SubmissionKind {
   extraFound,
   extraRepeated,
   unknownWord,
+  superResolved,
 }
 
 class SubmissionResult {
@@ -96,11 +97,13 @@ class GameState {
     Map<String, WordEntry> extras = const {},
     Map<String, Set<int>> revealedLetters = const {},
     List<RevealRecord> revealOrigins = const [],
+    List<SuperResolution> superHints = const [],
     this.phase = RoundPhase.playing,
   }) : order = List.unmodifiable(order),
        targets = Set.unmodifiable(targets),
        extras = Map.unmodifiable(extras),
        revealOrigins = List.unmodifiable(revealOrigins),
+       superHints = List.unmodifiable(superHints),
        revealedLetters = Map.unmodifiable({
          for (final entry in revealedLetters.entries)
            entry.key: Set<int>.unmodifiable(entry.value),
@@ -112,6 +115,7 @@ class GameState {
   final Map<String, WordEntry> extras;
   final Map<String, Set<int>> revealedLetters;
   final List<RevealRecord> revealOrigins;
+  final List<SuperResolution> superHints;
   final RoundPhase phase;
   int get explorerProgress => min(extras.length, level.extraGoal);
   bool get explorerUnlocked => extras.length >= level.extraGoal;
@@ -122,6 +126,7 @@ class GameState {
     Map<String, WordEntry>? extras,
     Map<String, Set<int>>? revealedLetters,
     List<RevealRecord>? revealOrigins,
+    List<SuperResolution>? superHints,
     RoundPhase? phase,
   }) => GameState(
     level: level,
@@ -131,6 +136,7 @@ class GameState {
     extras: extras ?? this.extras,
     revealedLetters: revealedLetters ?? this.revealedLetters,
     revealOrigins: revealOrigins ?? this.revealOrigins,
+    superHints: superHints ?? this.superHints,
     phase: phase ?? this.phase,
   );
 }
@@ -160,6 +166,7 @@ class GameEngine {
   final List<LevelDefinition> levels;
   final Map<String, WordEntry> lexicon;
   final Random _random;
+  Random get randomSource => _random;
   final void Function(GameEvent)? onEvent;
   late GameState _state;
   int _session = 0;
@@ -260,6 +267,57 @@ class GameEngine {
       ? _revealRandomLetter(RevealSource.paid, operationId)
       : null;
 
+  SubmissionResult resolveSuperHint(String operationId) {
+    if (state.phase != RoundPhase.playing) {
+      return const SubmissionResult(SubmissionKind.ignored);
+    }
+    final remaining = state.level.words
+        .where((w) => !state.targets.contains(w.key))
+        .toList();
+    if (remaining.isEmpty) {
+      return const SubmissionResult(SubmissionKind.ignored);
+    }
+    int hidden(WordEntry w) =>
+        w.letters.length - (state.revealedLetters[w.key]?.length ?? 0);
+    final largest = remaining.map(hidden).reduce(max);
+    final tied = remaining.where((w) => hidden(w) == largest).toList();
+    final word = tied[tied.length == 1 ? 0 : _random.nextInt(tied.length)];
+    final previous = state.revealedLetters[word.key] ?? const <int>{};
+    final indices = [
+      for (var i = 0; i < word.letters.length; i++)
+        if (!previous.contains(i)) i,
+    ];
+    final targets = {...state.targets, word.key};
+    final complete = targets.length == state.level.words.length;
+    _state = state.copyWith(
+      targets: targets,
+      phase: complete ? RoundPhase.completing : RoundPhase.playing,
+      revealedLetters: {
+        ...state.revealedLetters,
+        word.key: {...previous, ...indices},
+      },
+      revealOrigins: [
+        ...state.revealOrigins,
+        for (final i in indices)
+          RevealRecord(
+            targetKey: word.key,
+            index: i,
+            source: RevealSource.superHint,
+            sourceKey: operationId,
+          ),
+      ],
+      superHints: [
+        ...state.superHints,
+        SuperResolution(operationId, word.key, indices),
+      ],
+    );
+    return SubmissionResult(
+      SubmissionKind.superResolved,
+      word: word,
+      completed: complete,
+    );
+  }
+
   bool get canReveal =>
       state.phase == RoundPhase.playing &&
       state.level.words.any(
@@ -342,6 +400,7 @@ class GameEngine {
     targets: state.targets.toList(),
     extras: state.extras.keys.toList(),
     reveals: state.revealOrigins,
+    superHints: state.superHints,
   );
 
   GameEngine fork(RoundSnapshot snapshot) {
@@ -398,6 +457,19 @@ class GameEngine {
         )) {
       invalid('extras inválidas.');
     }
+    final assisted = <String, SuperResolution>{};
+    final assistedIds = <String>{};
+    for (final resolution in snapshot.superHints) {
+      if (resolution.operationId.isEmpty ||
+          !assistedIds.add(resolution.operationId) ||
+          assisted.containsKey(resolution.targetKey) ||
+          !snapshot.targets.contains(resolution.targetKey) ||
+          resolution.indices.isEmpty ||
+          resolution.indices.toSet().length != resolution.indices.length) {
+        invalid('resolução de Super Dica inválida.');
+      }
+      assisted[resolution.targetKey] = resolution;
+    }
     final reveals = <String, Set<int>>{};
     final origins = <String>{};
     for (final reveal in snapshot.reveals) {
@@ -410,16 +482,60 @@ class GameEngine {
       if (reveal.index < 0 ||
           reveal.index >= word.letters.length ||
           !indices.add(reveal.index) ||
-          indices.length >= word.letters.length) {
+          (indices.length >= word.letters.length &&
+              !assisted.containsKey(word.key))) {
         invalid('posição revelada inválida.');
       }
-      if (!origins.add('${reveal.source.name}:${reveal.sourceKey}')) {
+      if (reveal.source != RevealSource.superHint &&
+          !origins.add('${reveal.source.name}:${reveal.sourceKey}')) {
         invalid('origem repetida.');
       }
       if (reveal.source == RevealSource.extra &&
           !snapshot.extras.contains(reveal.sourceKey)) {
         invalid('extra de origem ausente.');
       }
+    }
+    for (final entry in reveals.entries) {
+      final normal = snapshot.reveals
+          .where(
+            (r) =>
+                r.targetKey == entry.key && r.source != RevealSource.superHint,
+          )
+          .length;
+      if (normal >=
+          level.words.firstWhere((w) => w.key == entry.key).letters.length) {
+        invalid('dica comum resolveu palavra.');
+      }
+    }
+    for (final resolution in snapshot.superHints) {
+      final word = level.words
+          .where((w) => w.key == resolution.targetKey)
+          .firstOrNull;
+      final records = snapshot.reveals
+          .where(
+            (r) =>
+                r.source == RevealSource.superHint &&
+                r.sourceKey == resolution.operationId,
+          )
+          .toList();
+      if (word == null ||
+          reveals[word.key]?.length != word.letters.length ||
+          records.length != resolution.indices.length ||
+          records.any(
+            (r) =>
+                r.targetKey != word.key ||
+                !resolution.indices.contains(r.index),
+          )) {
+        invalid('revelação assistida inconsistente.');
+      }
+    }
+    if (snapshot.reveals.any(
+      (r) =>
+          r.source == RevealSource.superHint &&
+          (!assistedIds.contains(r.sourceKey) ||
+              assisted[r.targetKey]?.operationId != r.sourceKey),
+    )) {
+      invalid('origem de Super Dica ausente.');
     }
     _state = GameState(
       level: level,
@@ -429,6 +545,7 @@ class GameEngine {
       extras: {for (final key in snapshot.extras) key: lexicon[key]!},
       revealedLetters: reveals,
       revealOrigins: snapshot.reveals,
+      superHints: snapshot.superHints,
       phase: snapshot.status == 'completed'
           ? (showCompletion ? RoundPhase.completing : RoundPhase.completed)
           : RoundPhase.playing,

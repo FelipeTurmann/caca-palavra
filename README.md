@@ -1,30 +1,65 @@
-# Conecte palavras — etapa 3
+# Conecte palavras — etapa 4
 
-Aplicativo Flutter/Dart para Android, com palavras em português brasileiro e progresso local em SQLite. A entrada é a tela inicial: **Jogar**, **Continuar · Nível N** ou **Ver resultado · Nível N**, conforme o progresso. Ao terminar a coleção, a campanha e o saldo são preservados.
+Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha, desafio diário e carteira local em SQLite. A tela inicial oferece Jogar, Continuar ou Ver resultado da campanha, além de um cartão independente do desafio diário.
 
-## Moedas, dicas e extras
+## Lojinha simulada
 
-- O perfil recebe **60 moedas uma única vez**.
-- A primeira conclusão de cada nível rende **20 moedas**.
-- Conquistar o selo Explorador rende **10 moedas uma única vez por nível**, além da revelação gratuita da extra. O saldo e o selo são confirmados na mesma transação. Selos já conquistados em versões anteriores permanecem válidos; o bônus vale para novas conquistas.
-- A dica custa **30 moedas** e exige confirmação. Abrir ou cancelar o diálogo não cobra.
-- Saldo insuficiente informa quanto falta. Não há botão de anúncio.
-- Cada extra inédita continua revelando uma letra gratuitamente e contando para a meta e o selo Explorador.
-- Dicas gratuitas e pagas usam a mesma política: sorteiam uma resposta ainda não encontrada e depois uma posição inédita. Pelo menos um quadrado permanece escondido por palavra; a resposta precisa ser formada no círculo.
-- Letras reveladas preservam acentos e cedilha. Respostas encontradas, posições já reveladas e palavras com apenas uma posição escondida ficam fora do sorteio.
-- Quando as posições elegíveis acabam, não há cobrança. Novas extras continuam contando para o selo.
+Tocar no saldo da home, campanha, diário ou resultado abre a **Lojinha**. A rodada é preservada ao abrir e fechar. O painel identifica permanentemente: **Loja em teste: compras simuladas, sem cobrança real.**
 
-## Progresso e dados locais
+| Pacote | Moedas | Preço de referência |
+|---|---:|---:|
+| `coins_500` | 500 | R$ 3,99 |
+| `coins_1000` | 1.000 | R$ 5,99 |
+| `coins_2500` | 2.500 | R$ 10,99 |
+| `coins_5000` | 5.000 | R$ 18,99 |
 
-O banco `conecte_palavras_v1.db` fica no diretório privado do aplicativo. `profiles` contém saldo, revisão e payload do progresso; `coin_transactions` registra os créditos e débitos; `operation_requests` guarda operações preparadas e seus resultados. O payload do progresso não duplica saldo ou revisão.
+Selecionar um pacote exige **Simular compra**. Cancelar não credita. Uma nova compra confirmada pode repetir o pacote; retentar o mesmo pedido não repete o crédito.
 
-Submissões válidas, extras, revelações, embaralhamento, dicas, conclusão e avanço são persistidos. O coordenador serializa os comandos; saldo e progresso são publicados após o commit. A última resposta, a recompensa e a liberação do próximo nível são uma transação. Cada recompensa usa `level-completion:<levelId>`, independente da versão do catálogo. Dicas têm identificador e proposta persistidos, inclusive a posição sorteada, para retomar sem duplicar o débito ou sortear outra letra.
+**Assistir anúncio · +15 moedas** é uma simulação sem vídeo, espera artificial ou limite diário. O botão fica bloqueado enquanto a operação está em andamento. Outro toque deliberado após o sucesso concede mais 15.
 
-Ao encerrar o processo depois de uma conclusão, a home oferece **Ver resultado**. A tela informa que a recompensa já foi recebida. Avançar reconhece o resultado e cria a próxima rodada; o último resultado volta à home com a campanha concluída. Não há opção de reiniciar ou apagar a campanha nesta etapa.
+Não há cobrança real, SDK de pagamentos, AdMob, credenciais ou backend. Os provedores de compra/anúncio são interfaces separadas, com implementações simuladas. Pedidos, recibos e lançamentos registram `simulated`; esses recibos não comprovam pagamentos reais e não devem ser reaproveitados como tal numa integração futura.
 
-Um erro de leitura não cria outro perfil nem concede moedas novamente. Um erro de gravação mantém o último estado confirmado e apresenta **Tentar novamente**. A navegação aguarda operações pendentes. O botão voltar primeiro cancela um gesto ativo; fora do gesto, retorna ao início.
+## Dicas e recompensas
 
-Não há sincronização, login ou serviço remoto. Desinstalar ou limpar os dados do Android pode remover o progresso. O ledger e a revisão garantem consistência local; não representam proteção absoluta contra alteração manual em um aparelho comprometido.
+- **60 moedas iniciais**, concedidas uma única vez por perfil.
+- Campanha: **+20 por primeira conclusão de nível** e **+10 por selo Explorador inédito**. Selos de versões anteriores continuam preservados sem crédito retroativo.
+- **Dica · 30 moedas** revela uma posição inédita de uma palavra ainda não encontrada.
+- Cada extra inédita continua revelando uma posição gratuitamente e contando para o selo.
+- Dicas comuns e extras deixam pelo menos uma posição escondida por palavra. Se não houver posições elegíveis, não cobram nem revelam outra letra.
+- **Super Dica · 100 moedas** resolve uma palavra inteira. Prioriza a maior quantidade de posições escondidas, descontando revelações anteriores; sorteia apenas entre empatadas. A confirmação não mostra antecipadamente a resposta.
+- A Super Dica é uma exceção ao limite de uma posição escondida: a palavra é marcada como encontrada e sua origem assistida é persistida. Cada operação conta como um uso, independentemente da quantidade de letras.
+- Uma Super Dica final gera débito e prêmio separados na mesma transação: **100 → 20** na campanha ou **100 → 50** no diário. Saldo 99 não permite antecipar o prêmio para financiar a compra.
+- Insuficiência de moedas oferece **Ir à lojinha**. Voltar exige nova confirmação da dica; nenhuma compra é acionada automaticamente.
+
+## Desafio diário
+
+O diário usa o calendário e o fuso local do aparelho, sem cronômetro de partida. A conclusão rende **50 moedas uma única vez por data**. Extras mantêm revelações gratuitas e selo visual; o diário não soma +20 da campanha nem +10 do selo.
+
+Campanha e diário possuem rodadas e resultados pendentes independentes, com carteira compartilhada. O diário continua disponível depois de concluir toda a campanha. Sair e entrar no mesmo dia retoma alvos, extras, ordem, dicas e resoluções assistidas; não há replay depois de reconhecer a conclusão.
+
+O catálogo local separado contém sete definições curadas, em rotação determinística com data-base. Mesma data e versão produzem o mesmo conteúdo, independentemente do progresso da campanha. Não há repetição em dias consecutivos, inclusive entre ciclos. Conteúdo pode reaparecer após o ciclo. A definição e o léxico usados ficam incorporados no diário iniciado para preservar a rodada após atualização do catálogo.
+
+À meia-noite local, a rodada incompleta expira sem reembolso de dicas. A data é conferida ao iniciar, em cada comando, ao retomar o aplicativo e ao abrir/fechar a loja. Um agendamento renovável também verifica a virada enquanto o aplicativo está ativo. A próxima meia-noite é calculada por calendário, sem somar 24 horas.
+
+Confirmações não efetivadas de uma data expirada são rejeitadas sem débito. Operações já confirmadas conservam recibo e prêmio, mesmo quando a resposta chega depois da virada. Créditos da loja pertencem à carteira e sobrevivem à expiração. Pular dias não cria desafios retroativos nem moedas. Retornar o relógio antes da última data diária aceita bloqueia o diário com uma mensagem; campanha e loja continuam disponíveis.
+
+O relógio é local, sem fonte de tempo confiável externa. Um avanço artificial pode antecipar desafios. Não há proteção completa contra manipulação de relógio nesta etapa.
+
+## Persistência e migração
+
+O banco privado continua em `conecte_palavras_v1.db`. A versão SQLite atual é **3** e o payload atual é **2**, com leitura compatível do payload 1. As versões do catálogo da campanha e do diário são independentes.
+
+- `profiles`: saldo, revisão e payload. Não há carteira duplicada nos snapshots.
+- `coin_transactions`: lançamentos com IDs próprios e `parent_operation_id` vinculando os lançamentos a um pedido.
+- `operation_requests`: propostas preparadas e recibos confirmados. A escolha de letra/palavra está na proposta antes do commit.
+
+O coordenador serializa mutações de campanha, diário e loja. Estado e efeitos visuais só são publicados após commit. Uma Super Dica final pode gravar débito e recompensa num único commit com lançamentos auditáveis separados. O saldo é validado contra a soma do ledger e contra o saldo anterior necessário à compra.
+
+Recompensas preservam suas chaves: `level-completion:<levelId>`, `explorer-reward:<levelId>` e `daily-completion:YYYY-MM-DD`. A identidade econômica do diário não inclui a versão do catálogo. Migração não reemite welcome, recompensas ou selos anteriores. Dados incompatíveis não são apagados: a carga apresenta erro e nova tentativa.
+
+Em falhas, a interface mantém o último estado confirmado e oferece retry com o mesmo pedido. A recuperação resolve recibos antes de efetivar propostas. Propostas diárias ainda não confirmadas revalidam a data; as expiradas são rejeitadas.
+
+O progresso é local. Desinstalar ou limpar os dados do Android pode removê-lo. O ledger assegura consistência operacional; não é proteção absoluta contra alteração manual de arquivos num aparelho comprometido.
 
 ## Executar e validar
 
@@ -32,59 +67,51 @@ Na pasta `C:\Users\felip\Desktop\dev\workspace\caca-palavra`:
 
 ```powershell
 flutter pub get
-flutter devices
 flutter run -d emulator-5554
-```
-
-Para iniciar o emulador existente: `flutter emulators --launch Medium_Phone_API_35`.
-
-```powershell
 dart format lib test integration_test
 flutter analyze --no-pub
 flutter test --no-pub --reporter expanded
-flutter test integration_test/game_flow_test.dart -d emulator-5554 --reporter expanded
+flutter test integration_test/stage4_flow_test.dart -d emulator-5554 --reporter expanded
 flutter build apk --debug
 ```
 
-O APK normal é gerado em `build/app/outputs/flutter-apk/app-debug.apk`.
+APK normal: `build/app/outputs/flutter-apk/app-debug.apk`.
 
-Os testes de persistência usam SQLite real em arquivos temporários por meio de `sqflite_common_ffi`. Os testes de widgets usam um repositório de resposta imediata para evitar misturar I/O nativo com o relógio simulado do Flutter. A integração Android usa exclusivamente `stage3_integration.db`; a fixture de recuperação usa `stage3_recovery.db`. Nenhum desses testes limpa o banco de produção.
-
-Para reproduzir o teste de encerramento real do processo, compile a fixture e execute o roteiro PowerShell em `tool/test_android_recovery.ps1`:
+Recuperação em processos separados, com banco exclusivo de teste:
 
 ```powershell
-flutter build apk --debug -t integration_test/recovery_app.dart
-./tool/test_android_recovery.ps1
-# Restaurar o aplicativo normal após testar:
-flutter build apk --debug
+flutter build apk --debug -t integration_test/stage4_recovery_app.dart
+./tool/test_stage4_recovery.ps1
+# Restaurar a versão normal, mantendo os dados:
+flutter build apk --debug -t lib/main.dart
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-O roteiro usa `adb install -r`, `am force-stop` e novas aberturas, sem desinstalar. Ele verifica a mesma posição revelada, saldo e extras após uma compra, resultado pendente após o commit antes da animação, avanço e campanha final. Os marcadores de teste são texto; não são gerados prints.
+A integração nova usa `stage4_integration.db`; a fixture de recuperação usa `stage4_recovery.db`. Os testes antigos usam seus próprios bancos `stage3_*`. Nenhum teste limpa o banco normal. Os testes de host usam SQLite real em arquivos temporários. Os testes de widgets usam um repositório de resposta imediata para controlar o relógio simulado. Não são salvos prints.
 
-## Onde ajustar
+## Configuração
 
-| Configuração | Arquivo |
+| Item | Local |
 |---|---|
-| Valores 60 / 20 / 10 / 30 | `Economy` em `lib/features/game/application/campaign_models.dart` |
-| Catálogo, fichas, respostas e meta `extraGoal` | `assets/data/levels.json` |
-| Léxico e grafia canônica de extras | `assets/data/lexicon_pt_br.json` |
-| Versão SQLite, migrações e transações | `lib/features/game/data/progress_repository.dart` |
-| Versão e estrutura do save | `CampaignProfile` em `lib/features/game/application/campaign_models.dart` |
-| Coordenação, operações e retomada | `lib/features/game/application/game_session_coordinator.dart` |
-| Restauração e sorteio de posições | `lib/features/game/domain/game_engine.dart` |
-| Cores, tipografia e tema | `lib/core/theme/game_theme.dart` |
-| Durações de feedback, conclusão, pulso, embaralhamento e coleta | `GameTiming` em `lib/features/game/presentation/game_controller.dart` |
-| Aparência dos quadrados revelados e estrela | `lib/features/game/presentation/widgets/word_slots.dart` |
-| Home, carteira e mensagens de salvamento | `lib/features/game/presentation/home_screen.dart` |
-| Partida, dicas e resultado | `lib/features/game/presentation/game_screen.dart` |
+| Valores 60 / 20 / 10 / 30 / 100 / 50 / 15 | `Economy` em `lib/features/game/application/campaign_models.dart` |
+| Pacotes e preços de referência | `lib/features/game/application/shop_models.dart` |
+| Interfaces e provedores simulados | `lib/features/game/application/shop_models.dart` |
+| Catálogo da campanha e metas de extras | `assets/data/levels.json` |
+| Léxico curado | `assets/data/lexicon_pt_br.json` |
+| Catálogo diário, versão e data-base | `assets/data/daily_levels.json` |
+| Agendamento determinístico | `lib/features/game/data/daily_catalog.dart` |
+| Calendário, contexto e snapshots diários | `lib/features/game/application/daily_models.dart` |
+| Comandos, datas, recibos e retomada | `lib/features/game/application/game_session_coordinator.dart` |
+| SQLite, migrações e validações | `lib/features/game/data/progress_repository.dart` |
+| Seleção de palavra e posições assistidas | `lib/features/game/domain/game_engine.dart` |
+| Tema e cores | `lib/core/theme/game_theme.dart` |
+| Durações das animações e agendamento da verificação de data | `lib/features/game/presentation/game_controller.dart` |
+| Home e saldo | `lib/features/game/presentation/home_screen.dart` |
+| Loja | `lib/features/game/presentation/shop_screen.dart` |
+| Partida, confirmações e resultado | `lib/features/game/presentation/game_screen.dart` |
 
-O catálogo atual tem 10 níveis, 39 respostas e 61 entradas no léxico. O tamanho da campanha não é fixo no código. É permitido anexar novos IDs ao final mantendo a ordem e os IDs existentes. Níveis anteriores não recebem recompensa novamente. O fingerprint detecta mudanças em fichas, respostas e meta de níveis já jogados; essas alterações exigem migração explícita. Versão SQLite, schema do payload e versão do catálogo são independentes.
+A campanha permanece com dez níveis, 39 respostas e 61 entradas no léxico. Novos níveis podem ser anexados mantendo IDs e ordem. Alterar conteúdo de um nível já jogado exige migração explícita; o fingerprint detecta incompatibilidades. Atualizações do catálogo diário devem incrementar sua versão; rodadas iniciadas conservam a definição salva.
 
-O motor continua sem dependência de Flutter. A identidade das fichas, normalização Unicode, gestos rápidos, desfazer, multitouch, redução de movimento e selo Explorador foram preservados. O callback de evento observa submissões e conclusões confirmadas; ele não é a origem dos lançamentos financeiros.
+Gestos, acentos/cedilha, fichas repetidas, segmentos rápidos, desfazer, multitouch, redução de movimento e selo Explorador foram preservados. Não há conta, sincronização, ranking ou cronômetro. O léxico é curado e limitado, não um dicionário completo.
 
-O léxico é uma coleção curada pequena, não um dicionário completo. Uma palavra ausente recebe “Palavra não reconhecida nesta versão.” Não há anúncios, vidas ou cronômetro.
-
-A validação desta entrega está em `docs/validacao-etapa-3.md`. Relatórios anteriores continuam disponíveis para histórico.
-
-Validação da recompensa de 10 moedas por selo: [docs/validacao-bonus-explorador.md](docs/validacao-bonus-explorador.md).
+Resultados desta entrega: `docs/validacao-etapa-4.md`. Relatórios anteriores permanecem como histórico.

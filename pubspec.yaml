@@ -20,5 +20,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - assets/data/daily_levels.json
     - assets/data/levels.json
     - assets/data/lexicon_pt_br.json
