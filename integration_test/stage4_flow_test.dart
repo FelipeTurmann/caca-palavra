@@ -84,37 +84,37 @@ void main() {
       expect(c.profile.balance, 575);
       await tap(find.byKey(const ValueKey('super-hint')));
       await tap(find.byKey(const ValueKey('confirm-super-hint')));
-      expect(c.profile.balance, 475);
+      expect(c.profile.balance, 455);
       expect(c.activeRound!.superHintUses, 1);
       for (final word in c.engine.state.level.words) {
         if (!c.engine.state.targets.contains(word.key)) await drag(word.key);
       }
-      expect(c.profile.balance, 495);
+      expect(c.profile.balance, 475);
       expect(find.text('Nível 1 concluído.'), findsOneWidget);
       final campaignPending = c.profile.pendingCompletion!.roundId;
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await tap(find.byKey(const ValueKey('daily-play')));
       await drag('TOGA');
-      expect(c.profile.balance, 495);
+      expect(c.profile.balance, 475);
       expect(c.engine.state.explorerUnlocked, true);
       expect(c.profile.explorerRewardedLevels, isEmpty);
       await tap(find.byKey(const ValueKey('hint')));
       await tap(find.byKey(const ValueKey('confirm-hint')));
-      expect(c.profile.balance, 465);
+      expect(c.profile.balance, 425);
       await tap(find.byKey(const ValueKey('super-hint')));
       await tap(find.byKey(const ValueKey('confirm-super-hint')));
-      expect(c.profile.balance, 365);
+      expect(c.profile.balance, 305);
       for (final word in c.engine.state.level.words) {
         if (!c.engine.state.targets.contains(word.key)) await drag(word.key);
       }
-      expect(c.profile.balance, 415);
+      expect(c.profile.balance, 355);
       expect(find.text('Desafio diário concluído'), findsOneWidget);
       expect(find.text('+50 moedas!'), findsOneWidget);
       expect(c.profile.pendingCompletion!.roundId, campaignPending);
       await tap(find.byType(WalletBadge));
       await tap(find.byKey(const ValueKey('simulated-ad')));
-      expect(c.profile.balance, 430);
+      expect(c.profile.balance, 370);
       await tap(find.byTooltip('Fechar loja'));
       expect(find.text('Desafio diário concluído'), findsOneWidget);
       await tap(find.byKey(const ValueKey('next-level')));
@@ -138,7 +138,7 @@ void main() {
         find.text('Um novo desafio diário está disponível.'),
         findsOneWidget,
       );
-      expect(c.profile.balance, 430);
+      expect(c.profile.balance, 370);
       expect(find.byType(GameScreen), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     },

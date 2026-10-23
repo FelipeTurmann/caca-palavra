@@ -7,8 +7,38 @@ abstract final class Economy {
   static const initialBalance = 60;
   static const levelReward = 20;
   static const explorerReward = 10;
-  static const hintPrice = 30;
-  static const superHintPrice = 100;
+  static const hintPrice = 50;
+  static const mascotHintPrice = 70;
+  static const superHintPrice = 120;
+  static const pricingVersion = 2;
+
+  static int currentPrice(String kind) => switch (kind) {
+    'paid_hint' => hintPrice,
+    'super_hint' => superHintPrice,
+    'mascot_hint' => mascotHintPrice,
+    _ => 0,
+  };
+
+  /// Legacy receipts and prepared operations retain their confirmed price.
+  static int confirmedPrice(Map<String, dynamic> request) {
+    final kind = request['kind'];
+    if (!['paid_hint', 'super_hint', 'mascot_hint'].contains(kind)) return 0;
+    final version = request['pricingVersion'] ?? 1;
+    final expected = switch ((version, kind)) {
+      (1, 'paid_hint') => 30,
+      (1, 'super_hint') => 100,
+      (2, 'paid_hint') => 50,
+      (2, 'super_hint') => 120,
+      (2, 'mascot_hint') => 70,
+      _ => throw const FormatException('Tabela de preços inválida.'),
+    };
+    final price = request['price'] ?? (version == 1 ? expected : null);
+    if (price != expected) {
+      throw const FormatException('Preço confirmado inválido.');
+    }
+    return expected;
+  }
+
   static const dailyReward = 50;
   static const adReward = 15;
 }

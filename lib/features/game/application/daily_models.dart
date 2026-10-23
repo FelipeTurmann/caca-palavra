@@ -52,6 +52,7 @@ class DailyProgress {
     required this.round,
     this.pendingResult = false,
     this.expired = false,
+    this.hasClueCatalog = true,
   }) : lexicon = Map.unmodifiable(lexicon);
   final String date;
   final int catalogVersion;
@@ -59,6 +60,7 @@ class DailyProgress {
   final Map<String, WordEntry> lexicon;
   final RoundSnapshot round;
   final bool pendingResult, expired;
+  final bool hasClueCatalog;
   bool get completed => round.status == 'completed';
   DailyProgress copyWith({
     RoundSnapshot? round,
@@ -72,6 +74,7 @@ class DailyProgress {
     round: round ?? this.round,
     pendingResult: pendingResult ?? this.pendingResult,
     expired: expired ?? this.expired,
+    hasClueCatalog: hasClueCatalog,
   );
   Map<String, Object?> toJson() => {
     'date': date,
@@ -84,13 +87,28 @@ class DailyProgress {
       'difficulty': definition.difficulty,
     },
     'lexicon': lexicon.values.map((w) => w.display).toList(),
+    if (hasClueCatalog)
+      'clues': {
+        for (final word in lexicon.values)
+          if (word.clue != null)
+            word.key: {'clue': word.clue, 'version': word.clueVersion},
+      },
     'round': round.toJson(),
     'pendingResult': pendingResult,
     'expired': expired,
   };
   factory DailyProgress.fromJson(Map<String, dynamic> json) {
     final definition = Map<String, dynamic>.from(json['definition'] as Map);
-    final lexicon = (json['lexicon'] as List).cast<String>().map(WordEntry.new);
+    final clues = json['clues'] as Map<String, dynamic>? ?? {};
+    final lexicon = (json['lexicon'] as List).cast<String>().map((display) {
+      final word = WordEntry(display);
+      final clue = clues[word.key] as Map<String, dynamic>?;
+      return WordEntry(
+        display,
+        clue: clue?['clue'] as String?,
+        clueVersion: clue?['version'] as int? ?? 1,
+      );
+    });
     return DailyProgress(
       date: json['date'] as String,
       catalogVersion: json['catalogVersion'] as int,
@@ -110,6 +128,7 @@ class DailyProgress {
       ),
       pendingResult: json['pendingResult'] as bool,
       expired: json['expired'] as bool,
+      hasClueCatalog: json.containsKey('clues'),
     );
   }
 }

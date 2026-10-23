@@ -83,7 +83,7 @@ void main() {
       await tap(tester, find.byKey(const ValueKey('play')));
       final round = c.activeRound!.roundId;
       await tap(tester, find.byKey(const ValueKey('super-hint')));
-      expect(find.textContaining('Faltam 40'), findsOneWidget);
+      expect(find.textContaining('Faltam 60'), findsOneWidget);
       await tap(tester, find.text('Ir à loja'));
       await tap(tester, find.byKey(const ValueKey('coins_500')));
       await tap(tester, find.byKey(const ValueKey('confirm-package')));
@@ -93,7 +93,7 @@ void main() {
       expect(c.activeRound!.superHintUses, 0);
       await tap(tester, find.byKey(const ValueKey('super-hint')));
       await tap(tester, find.byKey(const ValueKey('confirm-super-hint')));
-      expect(c.profile.balance, 460);
+      expect(c.profile.balance, 440);
       expect(c.activeRound!.superHintUses, 1);
       await close(tester);
     },
@@ -101,13 +101,13 @@ void main() {
   testWidgets(
     'Super Dica confirmation hides selected answer and cancel costs nothing',
     (tester) async {
-      final (c, _) = await mount(tester, balance: 100);
+      final (c, _) = await mount(tester, balance: 120);
       await tap(tester, find.byKey(const ValueKey('play')));
       await tap(tester, find.byKey(const ValueKey('super-hint')));
-      expect(find.text('Resolver uma palavra por 100 moedas?'), findsOneWidget);
+      expect(find.text('Resolver uma palavra por 120 moedas?'), findsOneWidget);
       expect(find.text('GATO'), findsNothing);
       await tap(tester, find.text('Agora não'));
-      expect(c.profile.balance, 100);
+      expect(c.profile.balance, 120);
       expect(c.activeRound!.superHintUses, 0);
       await close(tester);
     },
@@ -115,7 +115,7 @@ void main() {
   testWidgets(
     'daily home starts separate round and midnight closes old confirmation without charging',
     (tester) async {
-      final (c, controller) = await mount(tester, balance: 100);
+      final (c, controller) = await mount(tester, balance: 120);
       await tap(tester, find.byKey(const ValueKey('daily-play')));
       expect(find.text('Desafio diário'), findsOneWidget);
       expect(c.profile.currentRound, isNull);
@@ -128,7 +128,7 @@ void main() {
         find.text('Um novo desafio diário está disponível.'),
         findsOneWidget,
       );
-      expect(c.profile.balance, 100);
+      expect(c.profile.balance, 120);
       await tap(tester, find.text('Jogar novo desafio'));
       expect(c.activeDailyDate, '2026-01-02');
       await close(tester);

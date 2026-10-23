@@ -3,6 +3,17 @@ abstract final class WordNormalizer {
   static const _accented = 'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ';
   static const _plain = 'AAAAAEEEEIIIIOOOOOUUUUC';
 
+  static String normalizeClue(String value) {
+    final output = StringBuffer();
+    for (final rune in value.toUpperCase().runes) {
+      if (rune >= 0x300 && rune <= 0x36f) continue;
+      final char = String.fromCharCode(rune);
+      final index = _accented.indexOf(char);
+      output.write(index >= 0 ? _plain[index] : char);
+    }
+    return output.toString();
+  }
+
   static String normalize(String value) {
     final upper = value.trim().toUpperCase();
     final output = StringBuffer();

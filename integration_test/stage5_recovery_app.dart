@@ -26,7 +26,10 @@ Future<void> main() async {
 
   try {
     if (phase == 'seed_incomplete') await deleteDatabase(location);
-    final repo = await SqliteProgressRepository.open(databasePath: location);
+    final repo = await SqliteProgressRepository.open(
+      databasePath: location,
+      initialBalance: 100,
+    );
     final c = await GameSessionCoordinator.create(
       await GameData.load(),
       repo,
@@ -46,7 +49,7 @@ Future<void> main() async {
           ),
         );
         check(
-          c.profile.balance == 60 && !c.profile.hasStarted,
+          c.profile.balance == 100 && !c.profile.hasStarted,
           'tutorial changed the profile',
         );
         await expected.writeAsString(
@@ -92,7 +95,7 @@ Future<void> main() async {
         ];
         await c.submitWord(ids, session: c.engine.state.session);
         await c.purchaseHint(operationId: 'stage5-hint');
-        check(c.profile.balance == 30, 'playing balance');
+        check(c.profile.balance == 50, 'playing balance');
         await expected.writeAsString(
           canonicalJson(c.profile.toPayload()),
           flush: true,
@@ -113,7 +116,7 @@ Future<void> main() async {
           canonicalJson(c.profile.toPayload()) == await expected.readAsString(),
           'playing snapshot changed',
         );
-        check(c.profile.balance == 30, 'playing wallet changed');
+        check(c.profile.balance == 50, 'playing wallet changed');
       case 'prepare_hint':
         await c.startOrContinue();
         repo.fault = (point) {
@@ -125,7 +128,7 @@ Future<void> main() async {
           await c.purchaseHint(operationId: 'stage5-prepared-hint');
         } catch (_) {}
         check((await repo.pending()).length == 1, 'prepared operation missing');
-        check(c.profile.balance == 30, 'uncommitted hint charged');
+        check(c.profile.balance == 50, 'uncommitted hint charged');
       case 'verify_hint':
         check(
           (await repo.pending()).isEmpty,

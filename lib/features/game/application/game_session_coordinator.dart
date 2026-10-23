@@ -72,6 +72,12 @@ class SuperHintOutcome {
   final SubmissionResult? submission;
 }
 
+class MascotHintOutcome {
+  const MascotHintOutcome(this.status, [this.hint]);
+  final String status;
+  final MascotHint? hint;
+}
+
 /// One serial writer for campaign, daily rounds and the shared wallet.
 class GameSessionCoordinator {
   GameSessionCoordinator._(
@@ -594,6 +600,119 @@ class GameSessionCoordinator {
 
   String createHintId() =>
       operationId('hint:${activeRound?.roundId ?? 'none'}');
+
+  Map<String, dynamic> _priceFields(String kind, SavedOperation? receipt) {
+    if (receipt == null) {
+      return {
+        'price': Economy.currentPrice(kind),
+        'pricingVersion': Economy.pricingVersion,
+      };
+    }
+    Economy.confirmedPrice(receipt.request);
+    return {
+      if (receipt.request.containsKey('price'))
+        'price': receipt.request['price'],
+      if (receipt.request.containsKey('pricingVersion'))
+        'pricingVersion': receipt.request['pricingVersion'],
+    };
+  }
+
+  MascotHint? mascotHintFor(String key) => activeRound?.mascotHints
+      .where((hint) => hint.targetKey == key)
+      .firstOrNull;
+
+  WordEntry? clueWordFor(String key) {
+    if (mode != GameMode.daily) return data.lexicon[key];
+    final saved = activeDay?.lexicon[key];
+    if (activeDay?.hasClueCatalog == true) return saved;
+    final current = data.lexicon[key];
+    return saved?.display == current?.display ? current : null;
+  }
+
+  Future<MascotHintOutcome> purchaseMascotHint(
+    String targetKey, {
+    required String operationId,
+    RoundContext? expected,
+  }) {
+    final ctx = expected ?? context;
+    return _serial(() async {
+      if (ctx == null) return const MascotHintOutcome('inactive');
+      final request = {
+        ..._request('mascot_hint', ctx),
+        'targetKey': targetKey,
+        'price': Economy.mascotHintPrice,
+        'pricingVersion': Economy.pricingVersion,
+      };
+      final receipt = await repository.resolveOperation(operationId);
+      if (receipt != null) {
+        if (!_sameRequest(receipt.request, request) ||
+            receipt.result['rejected'] == true) {
+          throw OperationMismatch();
+        }
+        profile = await repository.load(data);
+        _restore();
+        return MascotHintOutcome(
+          'purchased',
+          MascotHint.fromJson(
+            Map<String, dynamic>.from(receipt.result['hint'] as Map),
+          ),
+        );
+      }
+      await _guard(ctx);
+      if (activeRound?.status != 'in_progress' ||
+          !engine.state.level.words.any((w) => w.key == targetKey)) {
+        return const MascotHintOutcome('inactive');
+      }
+      final existing = mascotHintFor(targetKey);
+      if (existing != null) return MascotHintOutcome('available', existing);
+      if (engine.state.targets.contains(targetKey)) {
+        return const MascotHintOutcome('resolved');
+      }
+      final word = clueWordFor(targetKey);
+      if (word?.clue == null ||
+          word!.clue!.trim().isEmpty ||
+          word.clue!.length > 120) {
+        return const MascotHintOutcome('unavailable');
+      }
+      if (profile.balance < Economy.mascotHintPrice) {
+        return const MascotHintOutcome('insufficient');
+      }
+      final hint = MascotHint(
+        targetKey: targetKey,
+        operationId: operationId,
+        clue: word.clue!,
+        clueVersion: word.clueVersion,
+        price: Economy.mascotHintPrice,
+        pricingVersion: Economy.pricingVersion,
+      );
+      final saved = await _save(
+        SaveProposal(
+          id: operationId,
+          expectedRevision: profile.revision,
+          request: request,
+          profile: _withRound(
+            activeRound!.withMascotHint(hint),
+          ).copyWith(balance: profile.balance - Economy.mascotHintPrice),
+          coins: [
+            CoinOperation(
+              id: operationId,
+              kind: 'mascot_hint',
+              amount: -Economy.mascotHintPrice,
+              levelId: ctx.levelId,
+              roundId: ctx.roundId,
+            ),
+          ],
+          result: {'kind': 'mascot_hint', 'hint': hint.toJson()},
+        ),
+      );
+      _restore();
+      return MascotHintOutcome(
+        'purchased',
+        MascotHint.fromJson(Map<String, dynamic>.from(saved['hint'] as Map)),
+      );
+    });
+  }
+
   Future<HintOutcome> purchaseHint({
     String? operationId,
     String? roundId,
@@ -602,12 +721,12 @@ class GameSessionCoordinator {
     final ctx = expected ?? context, id = operationId ?? createHintId();
     return _serial(() async {
       if (ctx == null) return const HintOutcome('inactive');
+      final receipt = await repository.resolveOperation(id);
       final request = {
         ..._request('paid_hint', ctx),
         'roundId': roundId ?? ctx.roundId,
-        'price': Economy.hintPrice,
+        ..._priceFields('paid_hint', receipt),
       };
-      final receipt = await repository.resolveOperation(id);
       if (receipt != null) {
         if (!_sameRequest(receipt.request, request) ||
             receipt.result['rejected'] == true) {
@@ -688,11 +807,11 @@ class GameSessionCoordinator {
     final ctx = expected ?? context, id = operationId ?? createHintId();
     return _serial(() async {
       if (ctx == null) return const SuperHintOutcome('inactive');
+      final receipt = await repository.resolveOperation(id);
       final request = {
         ..._request('super_hint', ctx),
-        'price': Economy.superHintPrice,
+        ..._priceFields('super_hint', receipt),
       };
-      final receipt = await repository.resolveOperation(id);
       if (receipt != null) {
         if (!_sameRequest(receipt.request, request) ||
             receipt.result['rejected'] == true) {

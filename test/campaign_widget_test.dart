@@ -55,7 +55,7 @@ void main() {
         find.byKey(const ValueKey('confirm-hint')),
         controller,
       );
-      expect(find.text('30 moedas'), findsOneWidget);
+      expect(find.text('10 moedas'), findsOneWidget);
       expect(c.profile.currentRound!.paidHints, 1);
       await tapAndSave(tester, find.byTooltip('Início'), controller);
       expect(find.text('Continuar · Nível 1'), findsOneWidget);
@@ -65,9 +65,9 @@ void main() {
     },
   );
   testWidgets(
-    '29 coins dialog gives exact shortfall, no ad or purchase action',
+    '49 coins dialog gives exact shortfall, no ad or purchase action',
     (tester) async {
-      final c = await session(tester, balance: 29);
+      final c = await session(tester, balance: 49);
       await tester.pumpWidget(WordGameApp(loader: () async => c));
       await tester.pumpAndSettle();
       final controller = tester
@@ -80,7 +80,7 @@ void main() {
       expect(find.textContaining('Faltam 1 '), findsOneWidget);
       expect(find.byKey(const ValueKey('confirm-hint')), findsNothing);
       expect(find.textContaining('anúncio'), findsNothing);
-      expect(c.profile.balance, 29);
+      expect(c.profile.balance, 49);
       await tester.tap(find.text('Agora não'));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());

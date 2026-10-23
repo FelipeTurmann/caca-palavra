@@ -135,9 +135,9 @@ void main() {
     },
   );
   test(
-    'Super Dica 100 to zero records one use and full assisted resolution',
+    'Super Dica 120 to zero records one use and full assisted resolution',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startOrContinue();
       final result = await c.purchaseSuperHint(operationId: 'super');
       expect(result.status, 'purchased');
@@ -163,9 +163,9 @@ void main() {
     },
   );
   test(
-    'Super Dica final campaign 100 to 20 has separate linked debit and reward',
+    'Super Dica final campaign 120 to 20 has separate linked debit and reward',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startOrContinue();
       await leaveLast();
       final result = await c.purchaseSuperHint(operationId: 'final-super');
@@ -178,7 +178,7 @@ void main() {
         where: 'parent_operation_id = ?',
         whereArgs: ['final-super'],
       );
-      expect(ledger.map((r) => r['amount']).toList(), [-100, 20]);
+      expect(ledger.map((r) => r['amount']).toList(), [-120, 20]);
       expect(ledger.map((r) => r['operation_id']).toSet(), hasLength(2));
       await c.close();
       await open();
@@ -186,8 +186,8 @@ void main() {
       expect(c.freshCompletion, false);
     },
   );
-  test('Super Dica final daily 100 to 50 with no campaign rewards', () async {
-    await reset(100);
+  test('Super Dica final daily 120 to 50 with no campaign rewards', () async {
+    await reset(120);
     await c.startDaily();
     await leaveLast();
     await c.purchaseSuperHint(operationId: 'daily-final');
@@ -200,7 +200,7 @@ void main() {
       where: 'parent_operation_id = ?',
       whereArgs: ['daily-final'],
     );
-    expect(ledger.map((r) => r['amount']).toList(), [-100, 50]);
+    expect(ledger.map((r) => r['amount']).toList(), [-120, 50]);
     await c.close();
     await open();
     await c.startDaily();
@@ -211,19 +211,19 @@ void main() {
     expect(c.profile.balance, 50);
   });
   test(
-    '99 coins cannot fund a final Super Dica using its own reward',
+    '119 coins cannot fund a final Super Dica using its own reward',
     () async {
-      await reset(99);
+      await reset(119);
       await c.startDaily();
       await leaveLast();
       expect((await c.purchaseSuperHint()).status, 'insufficient');
-      expect(c.profile.balance, 99);
+      expect(c.profile.balance, 119);
       expect(c.activeRound!.superHintUses, 0);
       expect(c.todayProgress!.completed, false);
     },
   );
-  test('simultaneous Super Dicas cannot spend twice from 100', () async {
-    await reset(100);
+  test('simultaneous Super Dicas cannot spend twice from 120', () async {
+    await reset(120);
     await c.startOrContinue();
     final results = await Future.wait([
       c.purchaseSuperHint(operationId: 'one'),
@@ -236,7 +236,7 @@ void main() {
   test(
     'same Super Dica ID repeated concurrently resolves same word and charges once',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startOrContinue();
       final results = await Future.wait([
         c.purchaseSuperHint(operationId: 'same'),
@@ -255,7 +255,7 @@ void main() {
     test(
       'multi-entry Super Dica rollback ${point.name} recovers same choice',
       () async {
-        await reset(100);
+        await reset(120);
         await c.startOrContinue();
         await leaveLast();
         repo.fault = (p) {
@@ -265,10 +265,10 @@ void main() {
           c.purchaseSuperHint(operationId: 'atomic-super'),
           throwsStateError,
         );
-        expect(c.profile.balance, 100);
+        expect(c.profile.balance, 120);
         expect(c.profile.completed, isEmpty);
         expect(c.activeRound!.superHintUses, 0);
-        expect((await repo.load(data)).balance, 100);
+        expect((await repo.load(data)).balance, 120);
         expect(await repo.database.query('coin_transactions'), hasLength(1));
         final chosen = (await repo.pending()).single.result['targetKey'];
         await c.close();
@@ -281,7 +281,7 @@ void main() {
   test(
     'after-commit failure resolves super receipt and never repeats reward or debit',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startOrContinue();
       await leaveLast();
       repo.fault = (p) {
@@ -363,7 +363,7 @@ void main() {
       await open();
       await c.startDaily();
       expect(canonicalJson(c.todayProgress!.toJson()), payload);
-      expect(c.profile.balance, 30);
+      expect(c.profile.balance, 10);
     },
   );
   test(
@@ -412,7 +412,7 @@ void main() {
   test(
     'prepared uncommitted daily Super Dica expires on process reopen without debit or reward',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startDaily();
       await leaveLast();
       repo.fault = (p) {
@@ -425,7 +425,7 @@ void main() {
       time = DateTime(2026, 1, 2);
       await c.close();
       await open();
-      expect(c.profile.balance, 100);
+      expect(c.profile.balance, 120);
       expect(c.profile.daily['2026-01-01']!.expired, true);
       expect(c.profile.daily['2026-01-01']!.completed, false);
       expect(await repo.pending(), isEmpty);
@@ -438,7 +438,7 @@ void main() {
   test(
     'daily committed before midnight keeps receipt when confirmation arrives next date',
     () async {
-      await reset(100);
+      await reset(120);
       await c.startDaily();
       await leaveLast();
       repo.fault = (p) {

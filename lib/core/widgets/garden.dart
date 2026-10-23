@@ -17,10 +17,12 @@ class Garden extends StatelessWidget {
     required this.child,
     this.quiet = false,
     this.immersive = false,
+    this.showCornerMascot = true,
   });
   final Widget child;
   final bool quiet;
   final bool immersive;
+  final bool showCornerMascot;
   @override
   Widget build(BuildContext context) => Stack(
     children: [
@@ -69,7 +71,8 @@ class Garden extends StatelessWidget {
           ),
         ),
       ),
-      if (immersive &&
+      if (showCornerMascot &&
+          immersive &&
           MediaQuery.sizeOf(context).height >= 740 &&
           MediaQuery.sizeOf(context).width >= 360 &&
           MediaQuery.orientationOf(context) == Orientation.portrait &&

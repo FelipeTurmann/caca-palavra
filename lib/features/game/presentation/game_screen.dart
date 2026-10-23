@@ -17,6 +17,7 @@ import 'widgets/word_slots.dart';
 import 'widgets/explorer_progress.dart';
 import 'widgets/extra_collection_layer.dart';
 import 'widgets/coin_collection_layer.dart';
+import 'widgets/mascot_help.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key, required this.controller});
@@ -61,6 +62,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeMetrics() {
+    final dialog = _hintContext;
+    _hintContext = null;
+    if (dialog != null && dialog.mounted) Navigator.of(dialog).pop(0);
     controller.cancelTransientPresentation();
   }
 
@@ -82,6 +86,96 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       isScrollControlled: true,
       builder: (context) => ExtrasSheet(controller: controller),
     );
+  }
+
+  Future<void> selectMascotWord(WordEntry word) async {
+    final c = controller;
+    if (!c.interactive || c.dragging || c.coordinator == null) return;
+    final session = c.coordinator!;
+    final expected = session.context;
+    if (session.mascotHintFor(word.key) != null) {
+      c.showMascotWord(word.key);
+      return;
+    }
+    if (c.state.targets.contains(word.key)) return;
+    if (session.clueWordFor(word.key)?.clue == null) {
+      c.showMascotWord(
+        word.key,
+        notice: 'Esta palavra está sem dica no momento.',
+      );
+      return;
+    }
+    c.showMascotWord(word.key);
+    final price = Economy.mascotHintPrice;
+    final enough = c.balance >= price;
+    final index = c.state.level.words.indexOf(word) + 1;
+    final id = session.createHintId();
+    final choice = await showDialog<int>(
+      context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
+      builder: (dialogContext) {
+        _hintContext = dialogContext;
+        return AlertDialog(
+          scrollable: true,
+          title: Text(enough ? 'Dica do mascote' : 'Moedas insuficientes'),
+          content: Text(
+            enough
+                ? 'Dica para a $indexª palavra · ${word.letters.length} letras. Receba uma frase para ajudar a descobrir esta palavra por $price moedas. Você tem ${c.balance} moedas.'
+                : 'Você tem ${c.balance} moedas. Faltam ${price - c.balance} moedas para esta dica.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, 0),
+              child: Text(enough ? 'Cancelar' : 'Agora não'),
+            ),
+            FilledButton(
+              key: const ValueKey('confirm-mascot-hint'),
+              onPressed: () => Navigator.pop(dialogContext, enough ? 1 : 2),
+              child: Text(
+                enough ? 'Receber dica · $price moedas' : 'Ir à loja',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    _hintContext = null;
+    if (!mounted) return;
+    if (!c.mascotOpen) return;
+    if (expected?.identity != session.context?.identity || c.dailyInvalid) {
+      c.closeMascot();
+      return;
+    }
+    if (choice == 2) {
+      await openShop(context, c);
+      if (mounted &&
+          expected?.identity == session.context?.identity &&
+          c.interactive) {
+        await selectMascotWord(word);
+      }
+      return;
+    }
+    if (choice != 1) {
+      c.chooseMascotWord();
+      return;
+    }
+    final outcome = await c.buyMascotHint(word.key, id, expected);
+    if (!mounted) return;
+    if (outcome?.status == 'unavailable') {
+      c.showMascotWord(
+        word.key,
+        notice: 'Esta palavra está sem dica no momento.',
+      );
+    } else if (outcome?.status == 'insufficient') {
+      c.showMascotWord(
+        word.key,
+        notice: 'Moedas insuficientes para esta dica.',
+      );
+    } else if (outcome?.status == 'resolved' || outcome?.status == 'inactive') {
+      c.closeMascot();
+    }
   }
 
   Future<void> showHint({bool superHint = false}) async {
@@ -112,7 +206,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 : !enough
                 ? 'Moedas insuficientes'
                 : superHint
-                ? 'Resolver uma palavra por 100 moedas?'
+                ? 'Resolver uma palavra por $price moedas?'
                 : 'Revelar uma letra?',
           ),
           content: Text(
@@ -122,7 +216,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 ? 'Você tem $balance moedas. Faltam ${price - balance} ${superHint ? 'para usar a Super Dica.' : 'para esta dica.'}'
                 : superHint
                 ? 'Resolve a palavra com mais letras escondidas. Se houver empate, uma delas será sorteada. Você tem $balance moedas.'
-                : 'Uma letra de uma palavra será revelada por 30 moedas. Se for a última letra, a palavra será completada. Você tem $balance moedas.',
+                : 'Uma letra de uma palavra será revelada por $price moedas. Se for a última letra, a palavra será completada. Você tem $balance moedas.',
           ),
           actions: [
             TextButton(
@@ -147,7 +241,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 ),
                 onPressed: () => Navigator.pop(context, 1),
                 child: Text(
-                  superHint ? 'Usar 100 moedas' : 'Revelar · 30 moedas',
+                  superHint ? 'Usar $price moedas' : 'Revelar · $price moedas',
                 ),
               ),
           ],
@@ -175,7 +269,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       canPop: controller.coordinator == null && !controller.dragging,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          if (controller.coordinator != null) {
+          if (controller.mascotOpen) {
+            controller.closeMascot();
+          } else if (controller.coordinator != null) {
             controller.leaveToHome();
           } else {
             controller.cancelGesture();
@@ -190,6 +286,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             Garden(
               quiet: true,
               immersive: true,
+              showCornerMascot:
+                  controller.coordinator == null ||
+                  controller.state.phase == RoundPhase.completed,
               child: SafeArea(
                 child: controller.dailyInvalid
                     ? Center(
@@ -237,364 +336,394 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         walletKey: _walletKey,
                         rewardSourceKey: _completionCoinSourceKey,
                       )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          final scale = MediaQuery.textScalerOf(
-                            context,
-                          ).scale(1);
-                          if (controller.coordinator != null &&
-                              controller.saveError == null &&
-                              scale <= 1.3 &&
-                              constraints.maxWidth >= 568 &&
-                              constraints.maxWidth > constraints.maxHeight) {
-                            return _WideRound(
-                              controller: controller,
-                              sourceKey: _extraSourceKey,
-                              targetKey: _extraTargetKey,
-                              walletKey: _walletKey,
-                              onExtras: showExtras,
-                              onHint: showHint,
-                              onSuperHint: () => showHint(superHint: true),
+                    : MascotRoundLayout(
+                        controller: controller,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final scale = MediaQuery.textScalerOf(
+                              context,
+                            ).scale(1);
+                            if (controller.coordinator != null &&
+                                controller.saveError == null &&
+                                scale <= 1.3 &&
+                                constraints.maxWidth >= 568 &&
+                                constraints.maxWidth > constraints.maxHeight) {
+                              return _WideRound(
+                                controller: controller,
+                                sourceKey: _extraSourceKey,
+                                targetKey: _extraTargetKey,
+                                walletKey: _walletKey,
+                                onExtras: showExtras,
+                                onHint: showHint,
+                                onSuperHint: () => showHint(superHint: true),
+                                onMascotWord: selectMascotWord,
+                              );
+                            }
+                            final minimumHeight =
+                                (controller.coordinator == null
+                                    ? 480.0
+                                    : 660.0) +
+                                math.max(0, scale - 1) * 520;
+                            final height = math.max(
+                              constraints.maxHeight,
+                              minimumHeight,
                             );
-                          }
-                          final minimumHeight =
-                              (controller.coordinator == null ? 480.0 : 660.0) +
-                              math.max(0, scale - 1) * 520;
-                          final height = math.max(
-                            constraints.maxHeight,
-                            minimumHeight,
-                          );
-                          final wheelSize = math.min(
-                            math.min(math.max(224.0, height * 0.42), 320.0),
-                            constraints.maxWidth - 32,
-                          );
-                          final answers = ThemedReadingPage(
-                            child: ListView(
-                              key: ValueKey(
-                                'answers-${controller.state.session}',
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              children: [
-                                for (final word in controller.state.level.words)
-                                  WordSlots(
-                                    word: word,
-                                    celebrate:
-                                        controller.feedback?.kind ==
-                                            SubmissionKind.targetFound &&
-                                        controller.feedback?.completed ==
-                                            false &&
-                                        controller.feedback?.word?.key ==
-                                            word.key,
-                                    revealed:
-                                        controller.state.revealedLetters[word
-                                            .key] ??
-                                        const {},
-                                    found: controller.state.targets.contains(
-                                      word.key,
-                                    ),
-                                    pulse:
-                                        (controller.feedback?.kind ==
-                                                        SubmissionKind
-                                                            .targetFound ||
-                                                    controller.feedback?.kind ==
-                                                        SubmissionKind
-                                                            .superResolved) &&
+                            final wheelSize = math.min(
+                              math.min(math.max(224.0, height * 0.42), 320.0),
+                              constraints.maxWidth - 32,
+                            );
+                            final answers = ThemedReadingPage(
+                              child: ListView(
+                                key: ValueKey(
+                                  'answers-${controller.state.session}',
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                                children: [
+                                  for (final word
+                                      in controller.state.level.words)
+                                    MascotWordLine(
+                                      controller: controller,
+                                      word: word,
+                                      onSelect: () => selectMascotWord(word),
+                                      child: WordSlots(
+                                        word: word,
+                                        celebrate:
+                                            controller.feedback?.kind ==
+                                                SubmissionKind.targetFound &&
+                                            controller.feedback?.completed ==
+                                                false &&
+                                            controller.feedback?.word?.key ==
+                                                word.key,
+                                        revealed:
+                                            controller
+                                                .state
+                                                .revealedLetters[word.key] ??
+                                            const {},
+                                        found: controller.state.targets
+                                            .contains(word.key),
+                                        pulse:
+                                            (controller.feedback?.kind ==
+                                                            SubmissionKind
+                                                                .targetFound ||
+                                                        controller
+                                                                .feedback
+                                                                ?.kind ==
+                                                            SubmissionKind
+                                                                .superResolved) &&
+                                                    controller
+                                                            .feedback
+                                                            ?.word
+                                                            ?.key ==
+                                                        word.key ||
                                                 controller
                                                         .feedback
-                                                        ?.word
-                                                        ?.key ==
+                                                        ?.revealedLetter
+                                                        ?.targetKey ==
                                                     word.key ||
-                                            controller
-                                                    .feedback
-                                                    ?.revealedLetter
-                                                    ?.targetKey ==
-                                                word.key ||
-                                            controller.paidReveal?.targetKey ==
-                                                word.key
-                                        ? controller.feedbackSerial
-                                        : 0,
+                                                controller
+                                                        .paidReveal
+                                                        ?.targetKey ==
+                                                    word.key
+                                            ? controller.feedbackSerial
+                                            : 0,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                            final largeText = scale > 1.3;
+                            final progressText =
+                                '${controller.state.targets.length} de ${controller.state.level.words.length} palavras';
+                            final feedbackHeight =
+                                64 * math.max(1, 1 + (scale - 1) * 2);
+                            Widget playArea(
+                              double size, {
+                              required bool bounded,
+                            }) {
+                              return Column(
+                                mainAxisSize: bounded
+                                    ? MainAxisSize.max
+                                    : MainAxisSize.min,
+                                children: [
+                                  if (bounded)
+                                    Expanded(child: answers)
+                                  else
+                                    SizedBox(
+                                      height: 220 * scale,
+                                      child: answers,
+                                    ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(
+                                      progressText,
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
                                   ),
-                              ],
-                            ),
-                          );
-                          final largeText = scale > 1.3;
-                          final progressText =
-                              '${controller.state.targets.length} de ${controller.state.level.words.length} palavras';
-                          final feedbackHeight =
-                              64 * math.max(1, 1 + (scale - 1) * 2);
-                          Widget playArea(
-                            double size, {
-                            required bool bounded,
-                          }) {
-                            return Column(
-                              mainAxisSize: bounded
-                                  ? MainAxisSize.max
-                                  : MainAxisSize.min,
-                              children: [
-                                if (bounded)
-                                  Expanded(child: answers)
-                                else
-                                  SizedBox(height: 220 * scale, child: answers),
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    progressText,
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                ),
-                                if (controller.coordinator != null && largeText)
-                                  Row(
+                                  if (controller.coordinator != null &&
+                                      largeText)
+                                    Row(
+                                      children: [
+                                        AdFreeButton(controller: controller),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Align(
+                                            alignment: Alignment.centerRight,
+                                            child: _HintTools(
+                                              controller: controller,
+                                              horizontal: true,
+                                              onHint: showHint,
+                                              onSuperHint: () =>
+                                                  showHint(superHint: true),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  Stack(
                                     children: [
-                                      AdFreeButton(controller: controller),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Align(
-                                          alignment: Alignment.centerRight,
+                                      Column(
+                                        children: [
+                                          Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal:
+                                                  controller.coordinator ==
+                                                          null ||
+                                                      largeText
+                                                  ? 0
+                                                  : 56,
+                                            ),
+                                            child: SelectionFeedback(
+                                              controller: controller,
+                                              extraIconKey: _extraSourceKey,
+                                            ),
+                                          ),
+                                          LetterWheel(
+                                            controller: controller,
+                                            size: size,
+                                          ),
+                                        ],
+                                      ),
+                                      if (controller.coordinator != null &&
+                                          !largeText)
+                                        Positioned(
+                                          left: 0,
+                                          top: 0,
+                                          child: AdFreeButton(
+                                            controller: controller,
+                                          ),
+                                        ),
+                                      if (controller.coordinator != null &&
+                                          !largeText)
+                                        Positioned(
+                                          right: 0,
+                                          top: 0,
                                           child: _HintTools(
                                             controller: controller,
-                                            horizontal: true,
                                             onHint: showHint,
                                             onSuperHint: () =>
                                                 showHint(superHint: true),
                                           ),
                                         ),
-                                      ),
                                     ],
                                   ),
-                                Stack(
-                                  children: [
-                                    Column(
-                                      children: [
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal:
-                                                controller.coordinator ==
-                                                        null ||
-                                                    largeText
-                                                ? 0
-                                                : 56,
-                                          ),
-                                          child: SelectionFeedback(
-                                            controller: controller,
-                                            extraIconKey: _extraSourceKey,
-                                          ),
-                                        ),
-                                        LetterWheel(
-                                          controller: controller,
-                                          size: size,
-                                        ),
-                                      ],
+                                  const SizedBox(height: 5),
+                                  const LagoonReadingSurface(
+                                    child: Text(
+                                      'Arraste para ligar as letras',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 14),
                                     ),
-                                    if (controller.coordinator != null &&
-                                        !largeText)
-                                      Positioned(
-                                        left: 0,
-                                        top: 0,
-                                        child: AdFreeButton(
-                                          controller: controller,
-                                        ),
-                                      ),
-                                    if (controller.coordinator != null &&
-                                        !largeText)
-                                      Positioned(
-                                        right: 0,
-                                        top: 0,
-                                        child: _HintTools(
-                                          controller: controller,
-                                          onHint: showHint,
-                                          onSuperHint: () =>
-                                              showHint(superHint: true),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                const LagoonReadingSurface(
-                                  child: Text(
-                                    'Arraste para ligar as letras',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 14),
                                   ),
-                                ),
-                              ],
-                            );
-                          }
+                                ],
+                              );
+                            }
 
-                          final levelLabel = Text(
-                            controller.isDaily
-                                ? 'Desafio diário'
-                                : 'Nível ${controller.state.level.id}',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          );
-                          final extrasButton = ExtrasButton(
-                            key: _extraTargetKey,
-                            controller: controller,
-                            onPressed: showExtras,
-                          );
-                          final body = SizedBox(
-                            height: largeText ? null : height,
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 540,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    8,
-                                    16,
-                                    8,
+                            final levelLabel = Text(
+                              controller.isDaily
+                                  ? 'Desafio diário'
+                                  : 'Nível ${controller.state.level.id}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            );
+                            final extrasButton = ExtrasButton(
+                              key: _extraTargetKey,
+                              controller: controller,
+                              onPressed: showExtras,
+                            );
+                            final body = SizedBox(
+                              height: largeText ? null : height,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 540,
                                   ),
-                                  child: Column(
-                                    children: [
-                                      if (controller.coordinator != null)
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: Wrap(
-                                            alignment:
-                                                WrapAlignment.spaceBetween,
-                                            crossAxisAlignment:
-                                                WrapCrossAlignment.center,
-                                            spacing: 12,
-                                            children: [
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    tooltip: 'Início',
-                                                    onPressed:
-                                                        controller.leaveToHome,
-                                                    icon: const Icon(
-                                                      Icons.arrow_back_rounded,
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      16,
+                                      8,
+                                      16,
+                                      8,
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        if (controller.coordinator != null)
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: Wrap(
+                                              alignment:
+                                                  WrapAlignment.spaceBetween,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              spacing: 12,
+                                              children: [
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    IconButton(
+                                                      tooltip: 'Início',
+                                                      onPressed: controller
+                                                          .leaveToHome,
+                                                      icon: const Icon(
+                                                        Icons
+                                                            .arrow_back_rounded,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  SettingsButton(
-                                                    controller: controller,
-                                                  ),
-                                                ],
-                                              ),
-                                              WalletBadge(
-                                                key: _walletKey,
-                                                balance: controller.balance,
-                                                onPressed: () => openShop(
-                                                  context,
-                                                  controller,
+                                                    SettingsButton(
+                                                      controller: controller,
+                                                    ),
+                                                  ],
                                                 ),
-                                              ),
-                                            ],
+                                                WalletBadge(
+                                                  key: _walletKey,
+                                                  balance: controller.balance,
+                                                  onPressed: () => openShop(
+                                                    context,
+                                                    controller,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      SaveStatus(controller: controller),
-                                      if (largeText)
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: Wrap(
-                                            alignment:
-                                                WrapAlignment.spaceBetween,
-                                            crossAxisAlignment:
-                                                WrapCrossAlignment.center,
-                                            spacing: 16,
+                                        SaveStatus(controller: controller),
+                                        if (largeText)
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: Wrap(
+                                              alignment:
+                                                  WrapAlignment.spaceBetween,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              spacing: 16,
+                                              children: [
+                                                levelLabel,
+                                                extrasButton,
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                          Row(
                                             children: [
-                                              levelLabel,
+                                              Expanded(child: levelLabel),
+                                              const SizedBox(width: 16),
                                               extrasButton,
                                             ],
                                           ),
-                                        )
-                                      else
-                                        Row(
-                                          children: [
-                                            Expanded(child: levelLabel),
-                                            const SizedBox(width: 16),
-                                            extrasButton,
-                                          ],
-                                        ),
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 3,
-                                          bottom: 8,
-                                        ),
-                                        child: Text(
-                                          'Encontre ${controller.state.level.words.length} palavras',
-                                          textAlign: TextAlign.center,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.titleLarge,
-                                        ),
-                                      ),
-                                      if (largeText)
-                                        playArea(wheelSize, bounded: false)
-                                      else
-                                        Expanded(
-                                          child: LayoutBuilder(
-                                            builder: (context, space) {
-                                              final style = DefaultTextStyle.of(
-                                                context,
-                                              ).style.copyWith(fontSize: 14);
-                                              double textHeight(String text) {
-                                                final painter =
-                                                    TextPainter(
-                                                      text: TextSpan(
-                                                        text: text,
-                                                        style: style,
-                                                      ),
-                                                      textDirection:
-                                                          Directionality.of(
-                                                            context,
-                                                          ),
-                                                      textScaler:
-                                                          MediaQuery.textScalerOf(
-                                                            context,
-                                                          ),
-                                                    )..layout(
-                                                      maxWidth: space.maxWidth,
-                                                    );
-                                                final result = painter.height;
-                                                painter.dispose();
-                                                return result;
-                                              }
-
-                                              // Reserve every answer row before growing the wheel.
-                                              // Short screens can still scroll the answer list.
-                                              final answerHeight =
-                                                  controller
-                                                          .state
-                                                          .level
-                                                          .words
-                                                          .length *
-                                                      (44 * math.max(1, scale) +
-                                                          12) +
-                                                  8;
-                                              final available =
-                                                  space.maxHeight -
-                                                  answerHeight -
-                                                  feedbackHeight -
-                                                  11 -
-                                                  textHeight(progressText) -
-                                                  textHeight(
-                                                    'Arraste para ligar as letras',
-                                                  );
-                                              final size = math.min(
-                                                wheelSize,
-                                                math.max(224.0, available),
-                                              );
-                                              return playArea(
-                                                size,
-                                                bounded: true,
-                                              );
-                                            },
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 3,
+                                            bottom: 8,
+                                          ),
+                                          child: Text(
+                                            'Encontre ${controller.state.level.words.length} palavras',
+                                            textAlign: TextAlign.center,
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.titleLarge,
                                           ),
                                         ),
-                                    ],
+                                        if (largeText)
+                                          playArea(wheelSize, bounded: false)
+                                        else
+                                          Expanded(
+                                            child: LayoutBuilder(
+                                              builder: (context, space) {
+                                                final style =
+                                                    DefaultTextStyle.of(context)
+                                                        .style
+                                                        .copyWith(fontSize: 14);
+                                                double textHeight(String text) {
+                                                  final painter =
+                                                      TextPainter(
+                                                        text: TextSpan(
+                                                          text: text,
+                                                          style: style,
+                                                        ),
+                                                        textDirection:
+                                                            Directionality.of(
+                                                              context,
+                                                            ),
+                                                        textScaler:
+                                                            MediaQuery.textScalerOf(
+                                                              context,
+                                                            ),
+                                                      )..layout(
+                                                        maxWidth:
+                                                            space.maxWidth,
+                                                      );
+                                                  final result = painter.height;
+                                                  painter.dispose();
+                                                  return result;
+                                                }
+
+                                                // Reserve every answer row before growing the wheel.
+                                                // Short screens can still scroll the answer list.
+                                                final answerHeight =
+                                                    controller
+                                                            .state
+                                                            .level
+                                                            .words
+                                                            .length *
+                                                        (44 *
+                                                                math.max(
+                                                                  1,
+                                                                  scale,
+                                                                ) +
+                                                            12) +
+                                                    8;
+                                                final available =
+                                                    space.maxHeight -
+                                                    answerHeight -
+                                                    feedbackHeight -
+                                                    11 -
+                                                    textHeight(progressText) -
+                                                    textHeight(
+                                                      'Arraste para ligar as letras',
+                                                    );
+                                                final size = math.min(
+                                                  wheelSize,
+                                                  math.max(224.0, available),
+                                                );
+                                                return playArea(
+                                                  size,
+                                                  bounded: true,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                          return largeText ||
-                                  constraints.maxHeight < minimumHeight
-                              ? SingleChildScrollView(child: body)
-                              : body;
-                        },
+                            );
+                            return largeText ||
+                                    constraints.maxHeight < minimumHeight
+                                ? SingleChildScrollView(child: body)
+                                : body;
+                          },
+                        ),
                       ),
               ),
             ),
@@ -689,7 +818,7 @@ class _HintTools extends StatelessWidget {
       button(
         'hint',
         'Dica',
-        30,
+        Economy.hintPrice,
         Icons.lightbulb_outline_rounded,
         onHint,
         false,
@@ -697,7 +826,7 @@ class _HintTools extends StatelessWidget {
       button(
         'super-hint',
         'Super Dica',
-        100,
+        Economy.superHintPrice,
         Icons.auto_fix_high_rounded,
         onSuperHint,
         true,
@@ -726,10 +855,12 @@ class _WideRound extends StatelessWidget {
     required this.onExtras,
     required this.onHint,
     required this.onSuperHint,
+    required this.onMascotWord,
   });
   final GameController controller;
   final GlobalKey sourceKey, targetKey, walletKey;
   final VoidCallback onExtras, onHint, onSuperHint;
+  final ValueChanged<WordEntry> onMascotWord;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
@@ -802,46 +933,51 @@ class _WideRound extends StatelessWidget {
                                       children: [
                                         for (final word
                                             in controller.state.level.words)
-                                          WordSlots(
+                                          MascotWordLine(
+                                            controller: controller,
                                             word: word,
-                                            celebrate:
-                                                controller.feedback?.kind ==
-                                                    SubmissionKind
-                                                        .targetFound &&
-                                                controller
-                                                        .feedback
-                                                        ?.completed ==
-                                                    false &&
-                                                controller
-                                                        .feedback
-                                                        ?.word
-                                                        ?.key ==
-                                                    word.key,
-                                            found: controller.state.targets
-                                                .contains(word.key),
-                                            revealed:
-                                                controller
-                                                    .state
-                                                    .revealedLetters[word
-                                                    .key] ??
-                                                const {},
-                                            pulse:
-                                                controller
-                                                            .feedback
-                                                            ?.word
-                                                            ?.key ==
-                                                        word.key ||
-                                                    controller
-                                                            .paidReveal
-                                                            ?.targetKey ==
-                                                        word.key ||
-                                                    controller
-                                                            .feedback
-                                                            ?.revealedLetter
-                                                            ?.targetKey ==
-                                                        word.key
-                                                ? controller.feedbackSerial
-                                                : 0,
+                                            onSelect: () => onMascotWord(word),
+                                            child: WordSlots(
+                                              word: word,
+                                              celebrate:
+                                                  controller.feedback?.kind ==
+                                                      SubmissionKind
+                                                          .targetFound &&
+                                                  controller
+                                                          .feedback
+                                                          ?.completed ==
+                                                      false &&
+                                                  controller
+                                                          .feedback
+                                                          ?.word
+                                                          ?.key ==
+                                                      word.key,
+                                              found: controller.state.targets
+                                                  .contains(word.key),
+                                              revealed:
+                                                  controller
+                                                      .state
+                                                      .revealedLetters[word
+                                                      .key] ??
+                                                  const {},
+                                              pulse:
+                                                  controller
+                                                              .feedback
+                                                              ?.word
+                                                              ?.key ==
+                                                          word.key ||
+                                                      controller
+                                                              .paidReveal
+                                                              ?.targetKey ==
+                                                          word.key ||
+                                                      controller
+                                                              .feedback
+                                                              ?.revealedLetter
+                                                              ?.targetKey ==
+                                                          word.key
+                                                  ? controller.feedbackSerial
+                                                  : 0,
+                                            ),
                                           ),
                                       ],
                                     ),

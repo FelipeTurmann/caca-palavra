@@ -1,4 +1,4 @@
-# Conecte palavras (0.9.1+15)
+# Conecte palavras (0.10.3+19)
 
 Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha, desafio diário e carteira local em SQLite. A tela inicial oferece Jogar, Continuar ou Ver resultado da campanha, além de um cartão independente do desafio diário.
 
@@ -80,17 +80,30 @@ Moedas de recompensas voam até o saldo, no estilo da coleta de extras: selo Exp
 
 Uma resposta inédita formada pelo jogador recebe um “Muito bem!” animado com a palavra encontrada e brilho somente na sua linha. Extras e Super Dica mantêm seus retornos específicos; a última resposta usa a comemoração de conclusão. A opção de reduzir animações preserva a mensagem estática, sem brilho ou movimento. O tempo fica em `GameTiming.wordCelebration`.
 
+## Dica do mascote
+
+Na seleção, somente palavras ainda não encontradas e sem dica comprada pulsam. Palavras com dica já comprada permanecem estáticas, com o ícone de reconsulta disponível.
+
+Toque no mascote da partida para abrir o balão **Vou te ajudar! Escolha uma palavra para receber uma dica.** e escolha uma linha. Os campos das palavras disponíveis pulsam suavemente, sem contorno ao redor da linha. Confirmar **Receber dica · 70 moedas** libera uma frase sobre aquela palavra, em outro balão ligado ao personagem. A frase não revela células nem resolve a palavra. **Escolher outra palavra** volta à seleção; **Fechar** ou tocar fora do balão recolhe a fala. Durante a escolha, tocar numa linha disponível continua abrindo sua confirmação; tocar no texto não fecha o balão.
+
+Cada uma das 61 palavras do léxico possui uma frase local. A compra vale para uma palavra naquela rodada; reler é gratuito, inclusive com saldo zero e após reabrir o aplicativo. Somente o ícone de balão identifica a linha com dica comprada; tocar nele reabre diretamente a mesma frase. Trocar tema preserva a compra e usa o mascote correspondente. Campanha e diário mantêm direitos independentes. A fala fica sobreposta ao jogo, sem redimensionar ou deslocar a roda e os campos. Balões adaptam-se a telas compactas, paisagem e texto ampliado; arrastar recolhe a fala. A pulsação respeita a opção de reduzir animações.
+
+Revelação de letra: **50 moedas**; frase do mascote: **70**; Super Dica: **120**. O histórico mantém os preços de 30/100 para recibos e pedidos antigos. O reajuste não debita diferenças nem reinicia o progresso. O schema SQLite 6 e o payload 2 continuam com leitura compatível; frases compradas e preços são registrados junto às operações existentes.
+
+[Validação, fluxo e capturas da Dica do mascote](docs/dica-mascote/validacao.md).
+
 ## Dicas e recompensas
 
 - **60 moedas iniciais**, concedidas uma única vez por perfil.
 - Campanha: **+20 por primeira conclusão de nível** e **+10 por selo Explorador inédito**. Selos de versões anteriores continuam preservados sem crédito retroativo.
-- **Dica · 30 moedas** revela uma posição inédita de uma palavra ainda não encontrada.
+- **Dica · 50 moedas** revela uma posição inédita de uma palavra ainda não encontrada.
+- **Dica do mascote · 70 moedas** libera a frase da linha escolhida; consultas posteriores são gratuitas na mesma rodada.
 - Cada extra inédita continua revelando uma posição gratuitamente e contando para o selo.
 - Tanto a dica comum quanto o bônus de uma extra podem revelar a última letra: a palavra passa a encontrada automaticamente e, se for a última resposta, a rodada é concluída. Sem posições elegíveis não há nova cobrança ou revelação.
-- **Super Dica · 100 moedas** resolve uma palavra inteira. Prioriza a maior quantidade de posições escondidas, descontando revelações anteriores; sorteia apenas entre empatadas. A confirmação não mostra antecipadamente a resposta.
+- **Super Dica · 120 moedas** resolve uma palavra inteira. Prioriza a maior quantidade de posições escondidas, descontando revelações anteriores; sorteia apenas entre empatadas. A confirmação não mostra antecipadamente a resposta.
 - A Super Dica continua resolvendo a palavra inteira de uma vez, com origem assistida persistida. Cada operação conta como um uso, independentemente da quantidade de letras.
-- Uma Super Dica final gera débito e prêmio separados na mesma transação: **100 → 20** na campanha ou **100 → 50** no diário. Saldo 99 não permite antecipar o prêmio para financiar a compra.
-- Uma dica comum final também confirma débito e prêmio juntos: **30 → 20** na campanha ou **30 → 50** no diário. É preciso ter as 30 moedas antes da compra. Se uma extra conquistar o selo Explorador e concluir a campanha ao mesmo tempo, ambos os bônus são creditados uma única vez.
+- Uma Super Dica final gera débito e prêmio separados na mesma transação: **120 → 20** na campanha ou **120 → 50** no diário. Saldo 119 não permite antecipar o prêmio para financiar a compra.
+- Uma dica comum final também confirma débito e prêmio juntos: **50 → 20** na campanha ou **50 → 50** no diário. É preciso ter as 50 moedas antes da compra. Se uma extra conquistar o selo Explorador e concluir a campanha ao mesmo tempo, ambos os bônus são creditados uma única vez.
 - Insuficiência de moedas oferece **Ir à loja**. Voltar exige nova confirmação da dica; nenhuma compra é acionada automaticamente.
 
 ## Desafio diário

@@ -157,7 +157,7 @@ void main() {
             .any((row) => row.celebrate),
         false,
       );
-      expect(session.profile.balance, 200);
+      expect(session.profile.balance, 180);
       await tester.pumpWidget(const SizedBox());
     },
   );

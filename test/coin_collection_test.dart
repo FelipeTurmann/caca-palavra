@@ -132,7 +132,7 @@ void main() {
       }
       await controller.buySuperHint('coin-final-super', session.context);
       await tester.pump();
-      expect(session.profile.balance, 220);
+      expect(session.profile.balance, 200);
       expect(controller.coinRewards.single.amount, 20);
       expect(
         find.byKey(const ValueKey('coin-flight-level-completion:1')),
@@ -157,7 +157,7 @@ void main() {
       controller.refresh();
       await tester.pumpAndSettle();
       expect(controller.coinRewards, isEmpty);
-      expect(session.profile.balance, 220);
+      expect(session.profile.balance, 200);
       await tester.pumpWidget(const SizedBox());
     },
   );

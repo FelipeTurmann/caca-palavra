@@ -24,7 +24,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final session = await GameSessionCoordinator.create(
       loadData(),
-      MemoryProgressRepository(120),
+      MemoryProgressRepository(200),
       random: RevealRandom(),
     );
     await session.startOrContinue();
@@ -88,7 +88,7 @@ void main() {
           find.text(extra ? 'GATO completada!' : 'Dica completou GATO!'),
           findsOneWidget,
         );
-        expect(controller.balance, extra ? 40 : 0);
+        expect(controller.balance, extra ? 60 : 0);
         expect(controller.freshVictory, false);
         await tester.pumpWidget(const SizedBox());
         await tester.pumpAndSettle();
@@ -112,12 +112,12 @@ void main() {
           expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
           expect(find.text('Muito bem!'), findsOneWidget);
           expect(controller.freshVictory, true);
-          expect(controller.balance, extra ? 60 : 20);
+          expect(controller.balance, extra ? 80 : 20);
           await tester.tap(find.byKey(const ValueKey('next-level')));
           await tester.pumpAndSettle();
           expect(controller.state.level.id, 2);
           expect(controller.state.targets, isEmpty);
-          expect(controller.balance, extra ? 60 : 20);
+          expect(controller.balance, extra ? 80 : 20);
           await tester.pumpWidget(const SizedBox());
           await tester.pumpAndSettle();
         },

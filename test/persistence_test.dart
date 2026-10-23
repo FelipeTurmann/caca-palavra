@@ -33,6 +33,12 @@ void main() {
 
   Future<SubmissionResult> word(String value) =>
       c.submitWord(idsFor(c.engine, value), session: c.engine.state.session);
+  Future<void> resetBalance(int balance) async {
+    await c.close();
+    await databaseFactoryFfi.deleteDatabase(location);
+    await open(welcome: balance);
+  }
+
   Future<void> finish() async {
     for (final target in c.engine.state.level.words) {
       await word(target.key);
@@ -87,6 +93,7 @@ void main() {
   test(
     'two paid hints, duplicate retry at zero, mismatched ID rejected',
     () async {
+      await resetBalance(100);
       await c.startOrContinue();
       final first = await c.purchaseHint(operationId: 'hint-1');
       await c.purchaseHint(operationId: 'hint-2');
@@ -104,6 +111,7 @@ void main() {
     },
   );
   test('parallel purchases are serialized and never overspend', () async {
+    await resetBalance(100);
     await c.startOrContinue();
     final results = await Future.wait(
       List.generate(5, (i) => c.purchaseHint(operationId: 'parallel-$i')),
@@ -119,7 +127,7 @@ void main() {
       c.purchaseHint(operationId: 'same'),
     ]);
     expect(revealJson(results[0].reveal), revealJson(results[1].reveal));
-    expect(c.profile.balance, 30);
+    expect(c.profile.balance, 10);
     expect(c.profile.currentRound!.paidHints, 1);
   });
   for (final point in StorageFaultPoint.values.where(
@@ -142,7 +150,7 @@ void main() {
       final reveal = prepared.result['reveal'];
       repo.fault = null;
       await c.retry();
-      expect(c.profile.balance, 30);
+      expect(c.profile.balance, 10);
       expect(
         (await repo.resolveOperation('rollback'))!.result['reveal'],
         reveal,
@@ -161,10 +169,10 @@ void main() {
       };
       final result = await c.purchaseHint(operationId: 'lost');
       expect(result.status, 'purchased');
-      expect(c.profile.balance, 30);
+      expect(c.profile.balance, 10);
       repo.fault = null;
       await c.purchaseHint(operationId: 'lost');
-      expect(c.profile.balance, 30);
+      expect(c.profile.balance, 10);
       expect(await repo.database.query('coin_transactions'), hasLength(2));
     },
   );
@@ -182,7 +190,7 @@ void main() {
       final saved = (await repo.pending()).single.result['reveal'];
       await c.close();
       await open();
-      expect(c.profile.balance, 30);
+      expect(c.profile.balance, 10);
       expect((await repo.resolveOperation('restart'))!.result['reveal'], saved);
       expect(await repo.pending(), isEmpty);
     },
@@ -302,11 +310,11 @@ void main() {
     expect(await repo.database.query('coin_transactions'), hasLength(1));
   });
   test(
-    '30 coins allow only one concurrent distinct purchase; 29 cannot buy',
+    '50 coins allow only one concurrent distinct purchase; 49 cannot buy',
     () async {
       await c.close();
       await databaseFactoryFfi.deleteDatabase(location);
-      await open(welcome: 30);
+      await open(welcome: 50);
       await c.startOrContinue();
       final result = await Future.wait([
         c.purchaseHint(operationId: 'a'),
@@ -319,10 +327,10 @@ void main() {
       expect(c.profile.balance, 0);
       await c.close();
       await databaseFactoryFfi.deleteDatabase(location);
-      await open(welcome: 29);
+      await open(welcome: 49);
       await c.startOrContinue();
       expect((await c.purchaseHint()).status, 'insufficient');
-      expect(c.profile.balance, 29);
+      expect(c.profile.balance, 49);
       expect(c.profile.currentRound!.reveals, isEmpty);
     },
   );
@@ -337,7 +345,7 @@ void main() {
       final paid = await c.purchaseHint(operationId: 'first');
       expect(paid.reveal!.targetKey, isNot('GATO'));
       await word('TOGA');
-      expect(c.profile.balance, 979);
+      expect(c.profile.balance, 959);
       while ((await c.purchaseHint()).status == 'purchased') {}
       final saved = c.profile.balance;
       expect((await c.purchaseHint()).status, 'unavailable');
@@ -356,6 +364,7 @@ void main() {
   test(
     'competing coordinators detect stale revision and cannot overwrite confirmed wallet',
     () async {
+      await resetBalance(100);
       await c.startOrContinue();
       final secondRepo = await SqliteProgressRepository.open(
         factory: databaseFactoryFfi,
@@ -368,7 +377,7 @@ void main() {
           second.purchaseHint(operationId: 'two'),
           throwsA(isA<RevisionConflict>()),
         );
-        expect(second.profile.balance, 30);
+        expect(second.profile.balance, 50);
         expect(second.profile.currentRound!.paidHints, 1);
         expect(await secondRepo.pending(), isEmpty);
         await second.purchaseHint(operationId: 'three');

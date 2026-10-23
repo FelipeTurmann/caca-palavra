@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 import '../domain/game_engine.dart';
+import '../domain/word_normalizer.dart';
 
 class GameData {
   GameData(
@@ -34,7 +35,25 @@ class GameData {
       }
       final lexicon = <String, WordEntry>{};
       for (final raw in lexiconRoot['words'] as List) {
-        final word = _word(raw);
+        final word = _word(
+          raw,
+          clueVersion: lexiconRoot['clueVersion'] as int? ?? 1,
+        );
+        if (lexiconRoot['clueVersion'] != null) {
+          final clue = word.clue;
+          if (clue == null ||
+              clue.trim().isEmpty ||
+              clue.length > 120 ||
+              word.clueVersion < 1) {
+            throw FormatException('Dica ausente ou inválida: ${word.display}.');
+          }
+          final normalized = WordNormalizer.normalizeClue(clue);
+          if (RegExp('(^|[^A-Z])${word.key}([^A-Z]|\$)').hasMatch(normalized)) {
+            throw FormatException(
+              'A dica contém sua resposta: ${word.display}.',
+            );
+          }
+        }
         lexicon.putIfAbsent(word.key, () => word);
       }
       final levels = <LevelDefinition>[];
@@ -71,12 +90,16 @@ class GameData {
     }
   }
 
-  static WordEntry _word(dynamic raw) {
+  static WordEntry _word(dynamic raw, {int clueVersion = 1}) {
     final display = raw['display'] as String;
     if (display != display.trim() || display != display.toUpperCase()) {
       throw FormatException('Use grafia em maiúsculas e sem espaços: $display');
     }
-    final word = WordEntry(display);
+    final word = WordEntry(
+      display,
+      clue: raw['clue'] as String?,
+      clueVersion: raw['clueVersion'] as int? ?? clueVersion,
+    );
     if (word.key.length < 3) {
       throw FormatException('Palavra com menos de três letras: $display');
     }

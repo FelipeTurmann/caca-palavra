@@ -243,8 +243,8 @@ void main() {
         jsonDecode(File('assets/data/lexicon_pt_br.json').readAsStringSync())
             as Map<String, dynamic>;
     (lexicon['words'] as List).addAll([
-      {'display': 'AVÓ'},
-      {'display': 'AVÔ'},
+      {'display': 'AVÓ', 'clue': 'Mãe de um dos seus pais.'},
+      {'display': 'AVÔ', 'clue': 'Pai de um dos seus pais.'},
     ]);
     final data = GameData.parse(levels, jsonEncode(lexicon));
     expect(data.lexicon['AVO']!.display, 'AVÓ');

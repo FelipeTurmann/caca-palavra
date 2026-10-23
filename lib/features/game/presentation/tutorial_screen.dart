@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/preferences/player_preferences.dart';
 import '../../../core/widgets/garden.dart';
 import '../domain/game_engine.dart';
+import '../application/campaign_models.dart';
 import 'game_controller.dart';
 import 'widgets/letter_wheel.dart';
 import 'widgets/word_slots.dart';
@@ -109,7 +110,7 @@ class _TutorialScreenState extends State<TutorialScreen>
       shuffled
           ? 'As letras mudaram de lugar. Você ainda pode formar GATO!'
           : 'Toque nas setas no centro do círculo para mudar a ordem das letras.',
-      'Extras revelam letras e ajudam a conquistar o selo Explorador. A Dica custa 30 moedas e a Super Dica, 100. Toque no saldo para abrir a Loja. Na home há um desafio diário. Seu progresso é salvo automaticamente.',
+      'Extras revelam letras e ajudam a conquistar o selo Explorador. A dica de letra custa ${Economy.hintPrice} moedas; a do mascote, ${Economy.mascotHintPrice}; a Super Dica, ${Economy.superHintPrice}. Toque no saldo para abrir a Loja. Na home há um desafio diário. Seu progresso é salvo automaticamente.',
     ];
     return PopScope<void>(
       canPop: false,

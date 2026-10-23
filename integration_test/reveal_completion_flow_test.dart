@@ -35,7 +35,7 @@ void main() {
           await deleteDatabase(location);
           final repo = await SqliteProgressRepository.open(
             databasePath: location,
-            initialBalance: 120,
+            initialBalance: 200,
           );
           final session = await GameSessionCoordinator.create(
             data,
@@ -134,7 +134,7 @@ void main() {
           expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
           expect(
             controller.balance,
-            extra ? (daily ? 80 : 60) : (daily ? 50 : 20),
+            extra ? (daily ? 100 : 80) : (daily ? 50 : 20),
           );
           await binding.takeScreenshot(
             '${(++screenshot).toString().padLeft(2, '0')}-resultado-$label',

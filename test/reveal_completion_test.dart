@@ -19,7 +19,7 @@ void main() {
   late GameSessionCoordinator session;
   late GameData data;
 
-  Future<void> open({int balance = 120}) async {
+  Future<void> open({int balance = 200}) async {
     repo = await SqliteProgressRepository.open(
       factory: databaseFactoryFfi,
       databasePath: location,
@@ -78,7 +78,7 @@ void main() {
   }
 
   int expectedBalance(bool daily, bool extra) =>
-      extra ? (daily ? 80 : 60) : (daily ? 50 : 20);
+      extra ? (daily ? 100 : 80) : (daily ? 50 : 20);
 
   Future<void> verify(bool daily, bool extra) async {
     expect(session.profile.balance, expectedBalance(daily, extra));
@@ -215,20 +215,20 @@ void main() {
     }
 
     test(
-      '${daily ? 'daily' : 'campaign'} final hint needs 30 coins before its reward',
+      '${daily ? 'daily' : 'campaign'} final hint needs 50 coins before its reward',
       () async {
         await session.close();
         await databaseFactoryFfi.deleteDatabase(location);
-        await open(balance: 119);
+        await open(balance: 199);
         await prepare(daily);
-        expect(session.profile.balance, 29);
+        expect(session.profile.balance, 49);
         final before = session.profile.toPayload();
         final ledger = await repo.database.query('coin_transactions');
         expect(
           (await session.purchaseHint(operationId: 'not-enough')).status,
           'insufficient',
         );
-        expect(session.profile.balance, 29);
+        expect(session.profile.balance, 49);
         expect(session.profile.toPayload(), before);
         expect(await repo.database.query('coin_transactions'), ledger);
         expect(session.engine.state.targets, {'GOTA', 'ATO'});

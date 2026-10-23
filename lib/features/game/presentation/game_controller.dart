@@ -5,6 +5,7 @@ import '../../../core/preferences/player_preferences.dart';
 import '../../../core/feedback/game_feedback.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/game_engine.dart';
+import '../domain/round_snapshot.dart';
 import '../application/game_session_coordinator.dart';
 import '../application/daily_models.dart';
 import '../application/campaign_models.dart';
@@ -73,6 +74,61 @@ class GameController extends ChangeNotifier {
   late final FeedbackCoordinator effects;
   bool settingsOpen = false;
   bool themesOpen = false;
+  bool mascotOpen = false;
+  bool mascotChoosing = false;
+  String? mascotTargetKey, mascotNotice;
+  MascotHint? get mascotHint => mascotTargetKey == null
+      ? null
+      : coordinator?.mascotHintFor(mascotTargetKey!);
+
+  void closeMascot({bool notify = true}) {
+    mascotOpen = false;
+    mascotChoosing = false;
+    mascotTargetKey = null;
+    mascotNotice = null;
+    if (notify) refresh();
+  }
+
+  void chooseMascotWord() {
+    if (!interactive || dragging || coordinator == null) return;
+    mascotOpen = true;
+    mascotChoosing = true;
+    mascotTargetKey = null;
+    mascotNotice = null;
+    refresh();
+  }
+
+  void showMascotWord(String key, {String? notice}) {
+    mascotOpen = true;
+    mascotChoosing = false;
+    mascotTargetKey = key;
+    mascotNotice = notice;
+    refresh();
+  }
+
+  Future<MascotHintOutcome?> buyMascotHint(
+    String key,
+    String id,
+    RoundContext? expected,
+  ) async {
+    final result = await run(() async {
+      final outcome = await coordinator!.purchaseMascotHint(
+        key,
+        operationId: id,
+        expected: expected,
+      );
+      if (outcome.hint != null && effects.active && !dailyInvalid) {
+        showMascotWord(key);
+      }
+      return outcome;
+    });
+    if (saveError != null) {
+      saveError = 'Não foi possível liberar a dica. Tente novamente.';
+      showMascotWord(key, notice: saveError);
+    }
+    return result;
+  }
+
   bool freshVictory = false;
   int victorySerial = 0;
   final Set<String> _acceptedPresentations = {};
@@ -139,6 +195,7 @@ class GameController extends ChangeNotifier {
   }
 
   void cancelTransientPresentation() {
+    closeMascot(notify: false);
     _feedbackTimer?.cancel();
     _shuffleTimer?.cancel();
     shuffling = false;
@@ -190,6 +247,7 @@ class GameController extends ChangeNotifier {
     try {
       await coordinator!.refreshDaily();
       if (dailyInvalid) {
+        closeMascot(notify: false);
         clearCoinRewards(notify: false);
         cancelGesture(notify: false);
         clearCollectionEffects(notify: false);
@@ -292,6 +350,9 @@ class GameController extends ChangeNotifier {
         feedbackSerial++;
       }
       if (result?['kind'] == 'shop') _showCredit(result!);
+      if (result?['kind'] == 'mascot_hint' && effects.active && !dailyInvalid) {
+        showMascotWord(result!['hint']['targetKey'] as String);
+      }
       if (result?['kind'] == 'advance') _clearRound();
       if (result?['home'] == true) onHome?.call();
     });
@@ -376,6 +437,7 @@ class GameController extends ChangeNotifier {
   void down(int pointer, Offset position) {
     if (!interactive || _geometry == null) return;
     if (gesture.down(pointer, position, _geometry!)) {
+      closeMascot(notify: false);
       _explorerTimer?.cancel();
       celebratingExplorer = false;
       _feedbackTimer?.cancel();
@@ -418,6 +480,13 @@ class GameController extends ChangeNotifier {
 
   void _accept(SubmissionResult result) {
     if (_disposed) return;
+    if (result.completed ||
+        (mascotTargetKey != null &&
+            (result.word?.key == mascotTargetKey ||
+                result.resolvedWord?.key == mascotTargetKey) &&
+            state.targets.contains(mascotTargetKey))) {
+      closeMascot(notify: false);
+    }
     final eventId = '$_effectRound:${result.kind.name}:${result.word?.key}';
     final success =
         result.kind == SubmissionKind.targetFound ||
@@ -571,6 +640,7 @@ class GameController extends ChangeNotifier {
   void resetView() => _clearRound();
   void _clearRound() {
     if (_disposed) return;
+    closeMascot(notify: false);
     _cancelTimers();
     freshVictory = false;
     gesture.cancel();
@@ -585,6 +655,7 @@ class GameController extends ChangeNotifier {
   }
 
   void detach() {
+    closeMascot(notify: false);
     clearCoinRewards(notify: false);
     freshVictory = false;
     _cancelTimers();

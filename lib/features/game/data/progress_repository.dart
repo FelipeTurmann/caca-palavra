@@ -334,7 +334,8 @@ class SqliteProgressRepository implements ProgressRepository {
     final rewards = <int>{}, explorerRewards = <int>{};
     final dailyRewards = <String>{},
         paidLedger = <String>{},
-        superLedger = <String>{};
+        superLedger = <String>{},
+        mascotLedger = <String>{};
     final paid =
         <
           String,
@@ -355,7 +356,23 @@ class SqliteProgressRepository implements ProgressRepository {
             String? date,
           })
         >{};
+    final mascot =
+        <
+          String,
+          ({MascotHint hint, RoundSnapshot round, String mode, String? date})
+        >{};
     for (final scope in allRounds) {
+      for (final hint in scope.round.mascotHints) {
+        if (mascot.containsKey(hint.operationId)) {
+          invalid('dica do mascote duplicada');
+        }
+        mascot[hint.operationId] = (
+          hint: hint,
+          round: scope.round,
+          mode: scope.mode,
+          date: scope.date,
+        );
+      }
       for (final r in scope.round.reveals.where(
         (r) => r.source == RevealSource.paid,
       )) {
@@ -439,7 +456,8 @@ class SqliteProgressRepository implements ProgressRepository {
           }
         case 'paid_hint':
           final source = paid[parent];
-          if (amount != -Economy.hintPrice ||
+          if (request['kind'] != 'paid_hint' ||
+              amount != -Economy.confirmedPrice(request) ||
               source == null ||
               mode != source.mode ||
               request['date'] != source.date ||
@@ -455,7 +473,8 @@ class SqliteProgressRepository implements ProgressRepository {
           }
         case 'super_hint':
           final source = supers[parent];
-          if (amount != -Economy.superHintPrice ||
+          if (request['kind'] != 'super_hint' ||
+              amount != -Economy.confirmedPrice(request) ||
               source == null ||
               mode != source.mode ||
               request['date'] != source.date ||
@@ -466,6 +485,24 @@ class SqliteProgressRepository implements ProgressRepository {
                   canonicalJson(source.resolution.indices) ||
               !superLedger.add(parent!)) {
             invalid('resolução de Super Dica inconsistente');
+          }
+        case 'mascot_hint':
+          final source = mascot[parent];
+          if (source == null ||
+              request['kind'] != 'mascot_hint' ||
+              amount != -Economy.confirmedPrice(request) ||
+              id != parent ||
+              source.hint.price != -amount ||
+              source.hint.pricingVersion != request['pricingVersion'] ||
+              source.mode != mode ||
+              source.date != request['date'] ||
+              source.round.roundId != row['round_id'] ||
+              source.round.levelId != row['level_id'] ||
+              request['targetKey'] != source.hint.targetKey ||
+              canonicalJson(result['hint']) !=
+                  canonicalJson(source.hint.toJson()) ||
+              !mascotLedger.add(parent!)) {
+            invalid('dica do mascote sem débito ou liberação correspondente');
           }
         case 'simulated_purchase':
           if (request['simulated'] != true ||
@@ -494,7 +531,8 @@ class SqliteProgressRepository implements ProgressRepository {
         explorerRewards.length != profile.explorerRewardedLevels.length ||
         dailyRewards.length != dailyCompleted.length ||
         paidLedger.length != paid.length ||
-        superLedger.length != supers.length) {
+        superLedger.length != supers.length ||
+        mascotLedger.length != mascot.length) {
       invalid('carteira divergente do histórico');
     }
   }
@@ -569,11 +607,7 @@ class SqliteProgressRepository implements ProgressRepository {
           proposal.request['date'] != calendarDate(now())) {
         throw DailyExpired();
       }
-      final price = switch (proposal.request['kind']) {
-        'paid_hint' => Economy.hintPrice,
-        'super_hint' => Economy.superHintPrice,
-        _ => 0,
-      };
+      final price = Economy.confirmedPrice(proposal.request);
       if (current.balance < price) {
         throw const FormatException('Saldo anterior insuficiente.');
       }

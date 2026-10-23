@@ -79,7 +79,7 @@ Future<void> main() async {
         await c.purchaseHint(operationId: 'daily-hint');
         await c.purchaseSuperHint(operationId: 'daily-super');
         await c.shuffle();
-        check(c.profile.balance == 355, 'seed balance');
+        check(c.profile.balance == 295, 'seed balance');
         await expected.writeAsString(
           canonicalJson(c.profile.toPayload()),
           flush: true,
@@ -96,38 +96,38 @@ Future<void> main() async {
         );
         await c.simulatePurchase('coins_500', id: 'recovery-package');
         await c.simulateAd(id: 'recovery-ad');
-        check(c.profile.balance == 355, 'duplicate shop credit');
+        check(c.profile.balance == 295, 'duplicate shop credit');
         check(
           c.profile.currentRound!.superHintUses == 1 &&
               c.profile.daily['2026-01-01']!.round.superHintUses == 1,
           'assisted resolution lost',
         );
         await c.startDaily();
-        check(c.profile.balance == 355, 'restore debit');
+        check(c.profile.balance == 295, 'restore debit');
       case 'complete':
         await c.startDaily();
         await leaveLast();
         await c.purchaseSuperHint(operationId: 'final-daily-super');
         check(
-          c.profile.balance == 305 && c.todayProgress!.pendingResult,
+          c.profile.balance == 225 && c.todayProgress!.pendingResult,
           'final daily balance',
         );
         await marker.writeAsString(
-          '$phase OK balance=305 before-animation',
+          '$phase OK balance=225 before-animation',
           flush: true,
         );
         await Completer<void>().future;
       case 'verify_completed':
         await c.startDaily();
         check(
-          c.profile.balance == 305 &&
+          c.profile.balance == 225 &&
               c.todayProgress!.completed &&
               !c.freshCompletion,
           'restored daily result',
         );
         await c.advance();
         check(
-          c.profile.balance == 305 && !c.todayProgress!.pendingResult,
+          c.profile.balance == 225 && !c.todayProgress!.pendingResult,
           'daily acknowledgment',
         );
       case 'prepare_uncommitted':
@@ -143,18 +143,18 @@ Future<void> main() async {
           throw StateError('fault not triggered');
         } catch (_) {
           check(
-            c.profile.balance == 305 && (await repo.pending()).isNotEmpty,
+            c.profile.balance == 225 && (await repo.pending()).isNotEmpty,
             'pending proposal missing',
           );
         }
         await marker.writeAsString(
-          '$phase OK balance=305 prepared-without-commit',
+          '$phase OK balance=225 prepared-without-commit',
           flush: true,
         );
         await Completer<void>().future;
       case 'verify_expired':
         check(
-          c.profile.balance == 305 && c.profile.daily['2026-01-02']!.expired,
+          c.profile.balance == 225 && c.profile.daily['2026-01-02']!.expired,
           'old prepared operation was applied',
         );
         check(

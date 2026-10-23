@@ -5,9 +5,12 @@ import 'word_normalizer.dart';
 import 'round_snapshot.dart';
 
 class WordEntry {
-  WordEntry(this.display) : key = WordNormalizer.normalize(display);
+  WordEntry(this.display, {this.clue, this.clueVersion = 1})
+    : key = WordNormalizer.normalize(display);
   final String display;
   final String key;
+  final String? clue;
+  final int clueVersion;
   List<String> get letters => WordNormalizer.visualLetters(display);
 }
 
@@ -101,12 +104,14 @@ class GameState {
     Map<String, Set<int>> revealedLetters = const {},
     List<RevealRecord> revealOrigins = const [],
     List<SuperResolution> superHints = const [],
+    List<MascotHint> mascotHints = const [],
     this.phase = RoundPhase.playing,
   }) : order = List.unmodifiable(order),
        targets = Set.unmodifiable(targets),
        extras = Map.unmodifiable(extras),
        revealOrigins = List.unmodifiable(revealOrigins),
        superHints = List.unmodifiable(superHints),
+       mascotHints = List.unmodifiable(mascotHints),
        revealedLetters = Map.unmodifiable({
          for (final entry in revealedLetters.entries)
            entry.key: Set<int>.unmodifiable(entry.value),
@@ -119,6 +124,7 @@ class GameState {
   final Map<String, Set<int>> revealedLetters;
   final List<RevealRecord> revealOrigins;
   final List<SuperResolution> superHints;
+  final List<MascotHint> mascotHints;
   final RoundPhase phase;
   int get explorerProgress => min(extras.length, level.extraGoal);
   bool get explorerUnlocked => extras.length >= level.extraGoal;
@@ -130,6 +136,7 @@ class GameState {
     Map<String, Set<int>>? revealedLetters,
     List<RevealRecord>? revealOrigins,
     List<SuperResolution>? superHints,
+    List<MascotHint>? mascotHints,
     RoundPhase? phase,
   }) => GameState(
     level: level,
@@ -140,6 +147,7 @@ class GameState {
     revealedLetters: revealedLetters ?? this.revealedLetters,
     revealOrigins: revealOrigins ?? this.revealOrigins,
     superHints: superHints ?? this.superHints,
+    mascotHints: mascotHints ?? this.mascotHints,
     phase: phase ?? this.phase,
   );
 }
@@ -416,6 +424,7 @@ class GameEngine {
     extras: state.extras.keys.toList(),
     reveals: state.revealOrigins,
     superHints: state.superHints,
+    mascotHints: state.mascotHints,
   );
 
   GameEngine fork(RoundSnapshot snapshot) {
@@ -548,6 +557,20 @@ class GameEngine {
     )) {
       invalid('origem de Super Dica ausente.');
     }
+    final clueWords = <String>{}, clueIds = <String>{};
+    for (final hint in snapshot.mascotHints) {
+      if (!targetKeys.contains(hint.targetKey) ||
+          !clueWords.add(hint.targetKey) ||
+          hint.operationId.isEmpty ||
+          !clueIds.add(hint.operationId) ||
+          hint.clue.trim().isEmpty ||
+          hint.clue.length > 120 ||
+          hint.clueVersion < 1 ||
+          hint.price != 70 ||
+          hint.pricingVersion != 2) {
+        invalid('dica do mascote inválida.');
+      }
+    }
     _state = GameState(
       level: level,
       session: preserveSession ? state.session : ++_session,
@@ -557,6 +580,7 @@ class GameEngine {
       revealedLetters: reveals,
       revealOrigins: snapshot.reveals,
       superHints: snapshot.superHints,
+      mascotHints: snapshot.mascotHints,
       phase: snapshot.status == 'completed'
           ? (showCompletion ? RoundPhase.completing : RoundPhase.completed)
           : RoundPhase.playing,
