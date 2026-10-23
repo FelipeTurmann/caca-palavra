@@ -1,6 +1,47 @@
-# Conecte palavras — etapa 5
+# Conecte palavras (0.9.1+15)
 
 Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha, desafio diário e carteira local em SQLite. A tela inicial oferece Jogar, Continuar ou Ver resultado da campanha, além de um cartão independente do desafio diário.
+
+## Temas
+
+Na home, **Temas**, logo abaixo de **Desafio diário**, abre as opções gratuitas **Jardim do Gatinho**, **Capivara na lagoa**, **Biblioteca encantada**, **Fundo do mar**, **Jardim das abelhas**, **Escola de magia** e **Refúgio na neve**. Toque em **Usar tema** para aplicar imediatamente; o painel permanece aberto. O subtítulo da home identifica a escolha atual. A preferência vale para campanha, diário, loja, configurações, tutorial e resultado, sem alterar níveis, palavras, moedas ou partidas salvas.
+
+O Jardim do Gatinho continua como padrão de instalações novas e perfis anteriores e agora usa o visual cartoon aprovado: fundo de jardim florido, gatinho 2D e canteiro circular com pedras e flores sob as letras. A capivara mantém seu mascote e artes cartoon: pôr do sol, lagoa com reflexos, vitórias-régias e ilha. As artes são camadas decorativas; controles, textos e fichas continuam reais e usam a mesma geometria de toque. As miniaturas reutilizam as mesmas artes locais, sem captura de telas embutida.
+
+A migração **SQLite 5 → 6** acrescenta `app_settings.visual_theme_id`; mantém carteira, rodadas, pedidos, plano sem anúncios e outras preferências. Se salvar falhar, a escolha fica ativa na sessão, com aviso e **Tentar novamente** na home e no seletor. Após encerrar o processo, restaura-se a última escolha confirmada.
+
+A **Biblioteca encantada** usa o fundo e a coruja cartoon aprovados, com estantes, luz dourada, painel claro para as respostas e selo verde-petróleo sobre livro aberto sob as letras. O seletor acomoda todas as opções com rolagem e duas colunas quando há espaço. O ID `biblioteca_encantada` usa a persistência existente; não exige outra migração.
+
+O **Fundo do mar** usa as artes cartoon aprovadas: cenário em aqua e turquesa, tartaruguinha verde e concha perolada centralizada sob as fichas creme. As respostas continuam sobre superfície clara, e o botão de embaralhar tem acabamento verde-petróleo. O ID `fundo_mar` usa a mesma persistência, sem alterar a geometria das letras ou criar migração de banco.
+
+O **Jardim das abelhas** usa o cenário ensolarado, a abelhinha e a base de margarida aprovados. Fichas verde-petróleo com letras brancas ficam sobre a flor centralizada; respostas e superfície de leitura têm contornos em tons de mel. O ID `jardim_abelhas` usa o mesmo salvamento local, preservando os quatro temas anteriores e as partidas existentes.
+
+A **Escola de magia** usa o cenário lavanda e creme, o dragãozinho verde-menta de asas recolhidas e o caldeirão aprovados. A abertura do caldeirão fica alinhada ao centro da roda, com fichas verde-petróleo, letras brancas e contornos dourados. O ID `escola_magia` usa a persistência existente; os cinco temas anteriores e as partidas salvas continuam válidos, sem nova migração de banco.
+
+O **Refúgio na neve** usa o cenário com pinheiros nevados e cabana iluminada, o pinguim de cachecol coral e o disco de gelo aprovados. As fichas azul-gelo têm letras em petróleo escuro e o embaralhamento é menta. A base fica concêntrica à roda existente, preservando posições e áreas de toque. O ID `refugio_neve` usa o mesmo salvamento local, sem nova migração.
+
+- [Validação de temas e capturas Android](docs/temas/validacao.md).
+- [Refinamento visual para aproximar do protótipo](docs/temas/refinamento-visual.md).
+- [Versão cartoon: comparação, recursos e validação](docs/temas/cartoon.md).
+- [Jardim do Gatinho aprovado: implementação e capturas](docs/temas/jardim-gatinho-cartoon.md).
+- [Biblioteca encantada aprovada: implementação e capturas](docs/temas/biblioteca-encantada.md).
+- [Correção do alinhamento do círculo da Biblioteca](docs/temas/biblioteca-alinhamento.md).
+- [Fundo do mar aprovado: implementação e capturas](docs/temas/fundo-mar.md).
+- [Jardim das abelhas aprovado: implementação e capturas](docs/temas/jardim-abelhas.md).
+- [Escola de magia aprovada: implementação e capturas](docs/temas/escola-magia.md).
+- [Refúgio na neve aprovado: implementação e capturas](docs/temas/refugio-neve.md).
+- [Recursos, prompt e pontos de configuração](docs/temas/recursos.md).
+
+Para repetir o fluxo Android com capturas locais:
+
+```powershell
+flutter drive --no-pub --driver=test_driver/themes_driver.dart --target=integration_test/themes_flow_test.dart -d emulator-5554
+# Restaurar o aplicativo normal depois da integração:
+flutter build apk --debug -t lib/main.dart
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+O teste usa exclusivamente `themes_integration.db`. As imagens ficam em `docs/temas/screenshots/`; a recuperação entre processos usa a fixture existente `stage4_recovery.db`, que agora também verifica o tema.
 
 ## Experiência e apresentação (0.2.0+2)
 
@@ -35,7 +76,7 @@ Selecionar um pacote exige **Simular compra**. Cancelar não credita. Uma nova c
 
 Não há cobrança real, SDK de pagamentos, AdMob, credenciais ou backend. Os provedores de compra/anúncio são interfaces separadas, com implementações simuladas. Pedidos, recibos e lançamentos registram `simulated`; esses recibos não comprovam pagamentos reais e não devem ser reaproveitados como tal numa integração futura.
 
-Moedas de recompensas voam até o saldo, no estilo da coleta de extras: selo Explorador (+10), conclusão da campanha (+20 por nível) e conclusão diária (+50). O crédito já está confirmado antes do voo; concluir a animação não altera o saldo. Reabrir resultado, repetir resposta ou retentar o mesmo recibo não repete o efeito. A redução de movimento mantém a atualização do saldo sem voo.
+Moedas de recompensas voam até o saldo, no estilo da coleta de extras: selo Explorador (+10), conclusão da campanha (+20 por nível) e conclusão diária (+50). A subida dura 1,1 segundo, configurada em `GameTiming.coinCollect`, independente dos 800 ms da estrela extra. O crédito já está confirmado antes do voo; concluir a animação não altera o saldo. Reabrir resultado, repetir resposta ou retentar o mesmo recibo não repete o efeito. A redução de movimento mantém a atualização do saldo sem voo.
 
 Uma resposta inédita formada pelo jogador recebe um “Muito bem!” animado com a palavra encontrada e brilho somente na sua linha. Extras e Super Dica mantêm seus retornos específicos; a última resposta usa a comemoração de conclusão. A opção de reduzir animações preserva a mensagem estática, sem brilho ou movimento. O tempo fica em `GameTiming.wordCelebration`.
 
@@ -45,13 +86,16 @@ Uma resposta inédita formada pelo jogador recebe um “Muito bem!” animado co
 - Campanha: **+20 por primeira conclusão de nível** e **+10 por selo Explorador inédito**. Selos de versões anteriores continuam preservados sem crédito retroativo.
 - **Dica · 30 moedas** revela uma posição inédita de uma palavra ainda não encontrada.
 - Cada extra inédita continua revelando uma posição gratuitamente e contando para o selo.
-- Dicas comuns e extras deixam pelo menos uma posição escondida por palavra. Se não houver posições elegíveis, não cobram nem revelam outra letra.
+- Tanto a dica comum quanto o bônus de uma extra podem revelar a última letra: a palavra passa a encontrada automaticamente e, se for a última resposta, a rodada é concluída. Sem posições elegíveis não há nova cobrança ou revelação.
 - **Super Dica · 100 moedas** resolve uma palavra inteira. Prioriza a maior quantidade de posições escondidas, descontando revelações anteriores; sorteia apenas entre empatadas. A confirmação não mostra antecipadamente a resposta.
-- A Super Dica é uma exceção ao limite de uma posição escondida: a palavra é marcada como encontrada e sua origem assistida é persistida. Cada operação conta como um uso, independentemente da quantidade de letras.
+- A Super Dica continua resolvendo a palavra inteira de uma vez, com origem assistida persistida. Cada operação conta como um uso, independentemente da quantidade de letras.
 - Uma Super Dica final gera débito e prêmio separados na mesma transação: **100 → 20** na campanha ou **100 → 50** no diário. Saldo 99 não permite antecipar o prêmio para financiar a compra.
+- Uma dica comum final também confirma débito e prêmio juntos: **30 → 20** na campanha ou **30 → 50** no diário. É preciso ter as 30 moedas antes da compra. Se uma extra conquistar o selo Explorador e concluir a campanha ao mesmo tempo, ambos os bônus são creditados uma única vez.
 - Insuficiência de moedas oferece **Ir à loja**. Voltar exige nova confirmação da dica; nenhuma compra é acionada automaticamente.
 
 ## Desafio diário
+
+Regra de conclusão por revelação, validação e capturas: [revelacao-completa/validacao.md](docs/revelacao-completa/validacao.md).
 
 O diário usa o calendário e o fuso local do aparelho, sem cronômetro de partida. A conclusão rende **50 moedas uma única vez por data**. Extras mantêm revelações gratuitas e selo visual; o diário não soma +20 da campanha nem +10 do selo.
 
@@ -67,9 +111,9 @@ O relógio é local, sem fonte de tempo confiável externa. Um avanço artificia
 
 ## Persistência e migração
 
-O banco privado continua em `conecte_palavras_v1.db`. A versão SQLite atual é **5** e o payload atual é **2**, com leitura compatível do payload 1. As versões do catálogo da campanha e do diário são independentes.
+O banco privado continua em `conecte_palavras_v1.db`. A versão SQLite atual é **6** e o payload atual é **2**, com leitura compatível do payload 1. As versões do catálogo da campanha e do diário são independentes.
 
-- `app_settings`: preferências e introdução, independentes de rodadas e moedas.
+- `app_settings`: preferências, tema visual e introdução, independentes de rodadas e moedas.
 - `profiles`: saldo, revisão e payload. Não há carteira duplicada nos snapshots.
 - `coin_transactions`: lançamentos com IDs próprios e `parent_operation_id` vinculando os lançamentos a um pedido.
 - `operation_requests`: propostas preparadas e recibos confirmados. A escolha de letra/palavra está na proposta antes do commit.

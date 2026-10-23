@@ -1,7 +1,7 @@
 name: caca_palavra
 description: Motor local de conectar palavras em português brasileiro.
 publish_to: none
-version: 0.2.0+3
+version: 0.9.1+15
 environment:
   sdk: ^3.12.0
 dependencies:
@@ -23,7 +23,27 @@ flutter:
     - assets/data/daily_levels.json
     - assets/data/levels.json
     - assets/data/lexicon_pt_br.json
-    - assets/mascot-cat.png
+    - assets/themes/jardim_gatinho/mascot-cartoon.png
+    - assets/themes/jardim_gatinho/scenery-cartoon.png
+    - assets/themes/jardim_gatinho/flowerbed-cartoon.png
+    - assets/themes/capivara_lagoa/mascot-cartoon.png
+    - assets/themes/capivara_lagoa/scenery-cartoon.png
+    - assets/themes/capivara_lagoa/island-cartoon.png
+    - assets/themes/biblioteca_encantada/mascot-cartoon.png
+    - assets/themes/biblioteca_encantada/scenery-cartoon.png
+    - assets/themes/biblioteca_encantada/book-seal-cartoon.png
+    - assets/themes/fundo_mar/mascot-cartoon.png
+    - assets/themes/fundo_mar/scenery-cartoon.png
+    - assets/themes/fundo_mar/shell-cartoon.png
+    - assets/themes/jardim_abelhas/mascot-cartoon.png
+    - assets/themes/jardim_abelhas/scenery-cartoon.png
+    - assets/themes/jardim_abelhas/flower-cartoon.png
+    - assets/themes/escola_magia/mascot-cartoon.png
+    - assets/themes/escola_magia/scenery-cartoon.png
+    - assets/themes/escola_magia/cauldron-cartoon.png
+    - assets/themes/refugio_neve/mascot-cartoon.png
+    - assets/themes/refugio_neve/scenery-cartoon.png
+    - assets/themes/refugio_neve/ice-disc-cartoon.png
     - assets/audio/
   fonts:
     - family: Nunito

@@ -151,18 +151,21 @@ void main() {
     expect(engine.state.extras, isEmpty);
   });
 
-  test('extras are separate, canonical, unique and never complete a level', () {
-    final engine = makeEngine();
-    expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraFound);
-    expect(engine.state.extras['TOGA']!.display, 'TOGA');
-    engine.shuffle();
-    expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraRepeated);
-    expect(engine.state.extras.length, 1);
-    expect(engine.state.targets, isEmpty);
-    expect(engine.state.phase, RoundPhase.playing);
-    engine.startLevel(1);
-    expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraFound);
-  });
+  test(
+    'extras remain separate, canonical and unique when the reveal is partial',
+    () {
+      final engine = makeEngine();
+      expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraFound);
+      expect(engine.state.extras['TOGA']!.display, 'TOGA');
+      engine.shuffle();
+      expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraRepeated);
+      expect(engine.state.extras.length, 1);
+      expect(engine.state.targets, isEmpty);
+      expect(engine.state.phase, RoundPhase.playing);
+      engine.startLevel(1);
+      expect(submitWord(engine, 'TOGA').kind, SubmissionKind.extraFound);
+    },
+  );
 
   test('invalid IDs, duplicate positions and stale sessions cannot submit', () {
     final engine = makeEngine();

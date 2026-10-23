@@ -4,6 +4,8 @@ import 'settings_screen.dart';
 import '../../../core/theme/game_theme.dart';
 import 'game_controller.dart';
 import 'shop_screen.dart';
+import 'themes_screen.dart';
+import '../../../core/theme/visual_theme_catalog.dart';
 import 'widgets/home_art.dart';
 import 'dart:math' as math;
 
@@ -22,9 +24,13 @@ class WalletBadge extends StatelessWidget {
     child: onPressed != null
         ? ActionChip(
             onPressed: onPressed,
-            avatar: const Icon(
-              Icons.monetization_on_rounded,
-              color: Color(0xFFAE7412),
+            avatar: Icon(
+              VisualThemeScope.of(context).isLagoon
+                  ? Icons.stars_rounded
+                  : Icons.monetization_on_rounded,
+              color: VisualThemeScope.of(context).isLagoon
+                  ? const Color(0xFFE6A11B)
+                  : const Color(0xFFAE7412),
             ),
             label: AnimatedSwitcher(
               duration: MediaQuery.disableAnimationsOf(context)
@@ -34,9 +40,13 @@ class WalletBadge extends StatelessWidget {
             ),
           )
         : Chip(
-            avatar: const Icon(
-              Icons.monetization_on_rounded,
-              color: Color(0xFFAE7412),
+            avatar: Icon(
+              VisualThemeScope.of(context).isLagoon
+                  ? Icons.stars_rounded
+                  : Icons.monetization_on_rounded,
+              color: VisualThemeScope.of(context).isLagoon
+                  ? const Color(0xFFE6A11B)
+                  : const Color(0xFFAE7412),
             ),
             label: AnimatedSwitcher(
               duration: MediaQuery.disableAnimationsOf(context)
@@ -204,6 +214,9 @@ class HomeScreen extends StatelessWidget {
                         title: 'Seu progresso',
                         subtitle: 'Nível ${profile.currentLevelId}',
                         progress: true,
+                        progressValue:
+                            profile.completed.length /
+                            profile.catalogIds.length,
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -268,17 +281,18 @@ class HomeScreen extends StatelessWidget {
                         coral: true,
                       ),
                     ),
-                    SaveStatus(controller: controller),
-                    ListenableBuilder(
-                      listenable: controller.preferences,
-                      builder: (context, _) =>
-                          controller.preferences.error == null
-                          ? const SizedBox.shrink()
-                          : Text(
-                              controller.preferences.error!,
-                              textAlign: TextAlign.center,
-                            ),
+                    const SizedBox(height: 14),
+                    _HomeCard(
+                      key: const ValueKey('home-themes'),
+                      onTap: controller.busy
+                          ? null
+                          : () => openThemes(context, controller),
+                      icon: Icons.palette_rounded,
+                      title: 'Temas',
+                      subtitle: 'Atual: ${VisualThemeScope.of(context).title}',
                     ),
+                    SaveStatus(controller: controller),
+                    ThemeSaveFeedback(preferences: controller.preferences),
                   ],
                 );
                 final navigation = Row(
@@ -368,6 +382,7 @@ class _HomeCard extends StatelessWidget {
     this.onTap,
     this.coral = false,
     this.progress = false,
+    this.progressValue = 0,
     this.caption,
     this.trailing = Icons.chevron_right_rounded,
   });
@@ -377,6 +392,7 @@ class _HomeCard extends StatelessWidget {
   final String title, subtitle;
   final VoidCallback? onTap;
   final bool coral, progress;
+  final double progressValue;
   @override
   Widget build(BuildContext context) => GardenCard(
     padding: EdgeInsets.zero,
@@ -394,15 +410,39 @@ class _HomeCard extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: coral
+                  color: VisualThemeScope.of(context).isLagoon
+                      ? null
+                      : coral
                       ? const Color(0xFFFFE9D3)
                       : const Color(0xFFF3EAD6),
-                  borderRadius: BorderRadius.circular(13),
+                  gradient: VisualThemeScope.of(context).isLagoon
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: coral
+                              ? [const Color(0xFFFF9371), GameTheme.coral]
+                              : progress
+                              ? [
+                                  const Color(0xFFFFD475),
+                                  const Color(0xFFF3AA30),
+                                ]
+                              : [const Color(0xFF388B8C), GameTheme.teal],
+                        )
+                      : null,
+                  borderRadius: BorderRadius.circular(
+                    VisualThemeScope.of(context).isLagoon ? 25 : 13,
+                  ),
                 ),
                 child: Icon(
-                  icon,
+                  progress && VisualThemeScope.of(context).isLagoon
+                      ? Icons.star_rounded
+                      : icon,
                   size: 36,
-                  color: coral ? GameTheme.coral : GameTheme.teal,
+                  color: VisualThemeScope.of(context).isLagoon
+                      ? Colors.white
+                      : coral
+                      ? GameTheme.coral
+                      : GameTheme.teal,
                 ),
               ),
               const SizedBox(width: 14),
@@ -424,13 +464,29 @@ class _HomeCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: progress ? 23 : 14,
+                        fontSize:
+                            progress && !VisualThemeScope.of(context).isLagoon
+                            ? 23
+                            : 14,
                         fontWeight: progress
                             ? FontWeight.w900
                             : FontWeight.w500,
                         height: 1.2,
                       ),
                     ),
+                    if (progress) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: progressValue,
+                          minHeight: 5,
+                          backgroundColor: const Color(0xFFF2DFC0),
+                          color: GameTheme.teal,
+                          semanticsLabel: 'Progresso na campanha',
+                        ),
+                      ),
+                    ],
                     if (caption != null)
                       Text(caption!, style: const TextStyle(fontSize: 14)),
                   ],

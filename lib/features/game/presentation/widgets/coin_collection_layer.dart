@@ -71,7 +71,7 @@ class _CoinFlightState extends State<_CoinFlight>
   void initState() {
     super.initState();
     animation =
-        AnimationController(vsync: this, duration: GameTiming.extraCollect)
+        AnimationController(vsync: this, duration: GameTiming.coinCollect)
           ..addStatusListener((status) {
             if (status == AnimationStatus.completed) finish();
           });

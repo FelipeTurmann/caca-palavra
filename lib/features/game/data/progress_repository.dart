@@ -32,7 +32,7 @@ abstract interface class ProgressRepository {
 }
 
 class LocalGameDatabase {
-  static const version = 5;
+  static const version = 6;
   static Future<Database> open({
     DatabaseFactory? factory,
     String? databasePath,
@@ -58,6 +58,7 @@ class LocalGameDatabase {
           );
           await createRequests(db);
           await createSettings(db, legacy: false);
+          await addVisualTheme(db);
           await createAdFreePlan(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
@@ -80,8 +81,17 @@ class LocalGameDatabase {
               );
             }
           }
+          if (oldVersion < 6) await addVisualTheme(db);
         },
       ),
+    );
+  }
+
+  static Future<void> addVisualTheme(DatabaseExecutor db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(app_settings)');
+    if (columns.any((column) => column['name'] == 'visual_theme_id')) return;
+    await db.execute(
+      "ALTER TABLE app_settings ADD COLUMN visual_theme_id TEXT NOT NULL DEFAULT 'jardim_gatinho'",
     );
   }
 

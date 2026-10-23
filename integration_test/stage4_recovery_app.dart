@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 import 'package:caca_palavra/app.dart';
+import 'package:caca_palavra/core/preferences/player_preferences.dart';
+import 'package:caca_palavra/core/theme/visual_theme_catalog.dart';
 import 'package:caca_palavra/features/game/application/campaign_models.dart';
 import 'package:caca_palavra/features/game/application/game_session_coordinator.dart';
 import 'package:caca_palavra/features/game/data/game_data.dart';
@@ -62,6 +64,11 @@ Future<void> main() async {
 
     switch (phase) {
       case 'seed':
+        final preferences = await PreferencesController.load(
+          SqlitePreferencesStore(repo.database),
+        );
+        await preferences.selectTheme(VisualTheme.lagoon);
+        preferences.dispose();
         await c.simulatePurchase('coins_500', id: 'recovery-package');
         await c.simulateAd(id: 'recovery-ad');
         await c.startOrContinue();
@@ -78,6 +85,11 @@ Future<void> main() async {
           flush: true,
         );
       case 'verify_partial':
+        check(
+          (await SqlitePreferencesStore(repo.database).read()).visualTheme ==
+              VisualTheme.lagoon,
+          'theme lost across process',
+        );
         check(
           canonicalJson(c.profile.toPayload()) == await expected.readAsString(),
           'snapshot changed across process',

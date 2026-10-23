@@ -1,12 +1,26 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/game_theme.dart';
+import '../theme/visual_theme_catalog.dart';
+import 'lagoon.dart';
+import 'cartoon_garden.dart';
+import 'cartoon_library.dart';
+import 'cartoon_ocean.dart';
+import 'cartoon_bees.dart';
+import 'cartoon_magic.dart';
+import 'cartoon_snow.dart';
 
 /// Pure decoration. Coordinates stay independent of the wheel's hit geometry.
 class Garden extends StatelessWidget {
-  const Garden({super.key, required this.child, this.quiet = false});
+  const Garden({
+    super.key,
+    required this.child,
+    this.quiet = false,
+    this.immersive = false,
+  });
   final Widget child;
   final bool quiet;
+  final bool immersive;
   @override
   Widget build(BuildContext context) => Stack(
     children: [
@@ -14,11 +28,96 @@ class Garden extends StatelessWidget {
         child: IgnorePointer(
           child: ExcludeSemantics(
             child: RepaintBoundary(
-              child: CustomPaint(painter: _GardenPainter(quiet: quiet)),
+              child: VisualThemeScope.of(context).isLagoon
+                  ? LagoonBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : VisualThemeScope.of(context).isLibrary
+                  ? CartoonLibraryBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : VisualThemeScope.of(context).isOcean
+                  ? CartoonOceanBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : VisualThemeScope.of(context).isBees
+                  ? CartoonBeesBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : VisualThemeScope.of(context).isMagic
+                  ? CartoonMagicBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : VisualThemeScope.of(context).isSnow
+                  ? CartoonSnowBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                    )
+                  : CartoonGardenBackdrop(
+                      quiet: quiet && !immersive,
+                      gameplay: immersive,
+                      fallback: CustomPaint(
+                        painter: _GardenPainter(quiet: quiet),
+                      ),
+                    ),
             ),
           ),
         ),
       ),
+      if (immersive &&
+          MediaQuery.sizeOf(context).height >= 740 &&
+          MediaQuery.sizeOf(context).width >= 360 &&
+          MediaQuery.orientationOf(context) == Orientation.portrait &&
+          MediaQuery.textScalerOf(context).scale(1) <= 1.3)
+        Positioned(
+          right: 4,
+          bottom:
+              VisualThemeScope.of(context).isLibrary ||
+                  VisualThemeScope.of(context).isOcean ||
+                  VisualThemeScope.of(context).isBees ||
+                  VisualThemeScope.of(context).isMagic ||
+                  VisualThemeScope.of(context).isSnow
+              ? 0
+              : 28,
+          child: VisualThemeScope.of(context).isLagoon
+              ? const LagoonPondMascot()
+              : VisualThemeScope.of(context).isLibrary
+              ? const ThemeMascot(
+                  theme: VisualTheme.library,
+                  height: 94,
+                  width: 94,
+                )
+              : VisualThemeScope.of(context).isOcean
+              ? const ThemeMascot(
+                  theme: VisualTheme.ocean,
+                  height: 94,
+                  width: 94,
+                )
+              : VisualThemeScope.of(context).isBees
+              ? const ThemeMascot(
+                  theme: VisualTheme.bees,
+                  height: 86,
+                  width: 86,
+                )
+              : VisualThemeScope.of(context).isMagic
+              ? const ThemeMascot(
+                  theme: VisualTheme.magic,
+                  height: 86,
+                  width: 86,
+                )
+              : VisualThemeScope.of(context).isSnow
+              ? const ThemeMascot(
+                  theme: VisualTheme.snow,
+                  height: 86,
+                  width: 86,
+                )
+              : const CartoonGardenCornerMascot(),
+        ),
       child,
     ],
   );
@@ -199,6 +298,12 @@ class _VolumeButtonState extends State<VolumeButton> {
                 ? [Colors.grey.shade400, Colors.grey.shade500]
                 : widget.coral
                 ? [const Color(0xFFFF8D71), const Color(0xFFE94F48)]
+                : VisualThemeScope.of(context).isLagoon
+                ? [
+                    const Color(0xFF049D9A),
+                    const Color(0xFF00767C),
+                    GameTheme.teal,
+                  ]
                 : [const Color(0xFF21818A), GameTheme.teal],
           ),
           border: Border.all(

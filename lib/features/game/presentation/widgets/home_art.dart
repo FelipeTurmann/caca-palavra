@@ -1,6 +1,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../../core/theme/game_theme.dart';
+import '../../../../core/theme/visual_theme_catalog.dart';
+import '../../../../core/widgets/lagoon.dart';
+import '../../../../core/widgets/cartoon_garden.dart';
+import '../../../../core/widgets/cartoon_library.dart';
+import '../../../../core/widgets/cartoon_ocean.dart';
+import '../../../../core/widgets/cartoon_bees.dart';
+import '../../../../core/widgets/cartoon_magic.dart';
+import '../../../../core/widgets/cartoon_snow.dart';
 
 /// Static, noninteractive decoration; all controls remain real Flutter widgets.
 class HomeWordGarden extends StatelessWidget {
@@ -12,104 +19,123 @@ class HomeWordGarden extends StatelessWidget {
   final double height;
   final bool fullBleed;
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: IgnorePointer(
-      child: SizedBox(
-        height: height,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final diameter = math.min(66.0, width * .18);
-            final centers = [
-              Offset(width * .20, height * .39),
-              Offset(width * .47, height * .17),
-              Offset(width * .71, height * .42),
-              Offset(width * .43, height * .67),
-            ];
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: _WordGardenPainter(
-                        centers,
-                        fullBleed
-                            ? math.max(
-                                0.0,
-                                (MediaQuery.sizeOf(context).width - width) / 2,
-                              )
-                            : 0,
-                      ),
-                    ),
-                  ),
-                ),
-                for (var i = 0; i < centers.length; i++)
-                  Positioned(
-                    left: centers[i].dx - diameter / 2,
-                    top: centers[i].dy - diameter / 2,
-                    child: Container(
-                      width: diameter,
-                      height: diameter,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF2B8B91),
-                            Color(0xFF0B5660),
-                            Color(0xFF074650),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: const Color(0xFF419B9F),
-                          width: 1.2,
-                        ),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x2A0B5660),
-                            offset: Offset(0, 4),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        ['G', 'A', 'O', 'T'][i],
-                        textScaler: TextScaler.noScaling,
-                        style: TextStyle(
-                          fontSize: diameter * .58,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          shadows: const [
-                            Shadow(
-                              color: Color(0x4404373D),
-                              offset: Offset(0, 2),
+  Widget build(BuildContext context) => VisualThemeScope.of(context).isLagoon
+      ? LagoonHero(height: height)
+      : ExcludeSemantics(
+          child: IgnorePointer(
+            child: SizedBox(
+              height: height,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final theme = VisualThemeScope.of(context);
+                  final creamTokens =
+                      theme.isLibrary ||
+                      theme.isOcean ||
+                      theme.isBees ||
+                      theme.isMagic ||
+                      theme.isSnow;
+                  final diameter = math.min(66.0, width * .18);
+                  final centers = [
+                    Offset(width * .20, height * .39),
+                    Offset(width * .47, height * .17),
+                    Offset(width * .71, height * .42),
+                    Offset(width * .43, height * .67),
+                  ];
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            painter: _WordGardenPainter(
+                              centers,
+                              fullBleed
+                                  ? math.max(
+                                      0.0,
+                                      (MediaQuery.sizeOf(context).width -
+                                              width) /
+                                          2,
+                                    )
+                                  : 0,
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                Positioned(
-                  right: 0,
-                  bottom: -5,
-                  child: Image.asset(
-                    'assets/mascot-cat.png',
-                    height: height * .59,
-                    width: width * .35,
-                    fit: BoxFit.contain,
-                    alignment: Alignment.bottomRight,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    ),
-  );
+                      for (var i = 0; i < centers.length; i++)
+                        Positioned(
+                          left: centers[i].dx - diameter / 2,
+                          top: centers[i].dy - diameter / 2,
+                          child: Container(
+                            width: diameter,
+                            height: diameter,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: creamTokens
+                                    ? const [
+                                        Color(0xFFFFF9EE),
+                                        Color(0xFFFFF1D5),
+                                      ]
+                                    : const [
+                                        Color(0xFF2B8B91),
+                                        Color(0xFF0B5660),
+                                        Color(0xFF074650),
+                                      ],
+                              ),
+                              border: Border.all(
+                                color: creamTokens
+                                    ? const Color(0xFFFF9372)
+                                    : const Color(0xFF419B9F),
+                                width: 1.2,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x2A0B5660),
+                                  offset: Offset(0, 4),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              ['G', 'A', 'O', 'T'][i],
+                              textScaler: TextScaler.noScaling,
+                              style: TextStyle(
+                                fontSize: diameter * .58,
+                                fontWeight: FontWeight.w900,
+                                color: creamTokens
+                                    ? const Color(0xFF123B49)
+                                    : Colors.white,
+                                shadows: creamTokens
+                                    ? null
+                                    : const [
+                                        Shadow(
+                                          color: Color(0x4404373D),
+                                          offset: Offset(0, 2),
+                                        ),
+                                      ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        right: 0,
+                        bottom: theme.isMagic ? -23 : -5,
+                        child: ThemeMascot(
+                          height: height * .59,
+                          width: width * .35,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        );
 }
 
 class HomeLandscape extends StatelessWidget {
@@ -122,7 +148,21 @@ class HomeLandscape extends StatelessWidget {
         child: IgnorePointer(
           child: ExcludeSemantics(
             child: RepaintBoundary(
-              child: CustomPaint(painter: _HomeLandscapePainter()),
+              child: VisualThemeScope.of(context).isLagoon
+                  ? const LagoonBackdrop()
+                  : VisualThemeScope.of(context).isLibrary
+                  ? const CartoonLibraryBackdrop()
+                  : VisualThemeScope.of(context).isOcean
+                  ? const CartoonOceanBackdrop()
+                  : VisualThemeScope.of(context).isBees
+                  ? const CartoonBeesBackdrop()
+                  : VisualThemeScope.of(context).isMagic
+                  ? const CartoonMagicBackdrop()
+                  : VisualThemeScope.of(context).isSnow
+                  ? const CartoonSnowBackdrop()
+                  : CartoonGardenBackdrop(
+                      fallback: CustomPaint(painter: _HomeLandscapePainter()),
+                    ),
             ),
           ),
         ),
@@ -132,37 +172,12 @@ class HomeLandscape extends StatelessWidget {
   );
 }
 
-/// Sky ends at the measured bottom of the illustration, so the yellow ground
-/// starts at the grass even when the header, text or viewport changes size.
+/// Layout wrapper retained while the illustrated scenery spans the full page.
 class HomeSky extends StatelessWidget {
   const HomeSky({super.key, required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) => CustomPaint(
-    painter: _HomeSkyPainter(MediaQuery.sizeOf(context).width),
-    child: child,
-  );
-}
-
-class _HomeSkyPainter extends CustomPainter {
-  _HomeSkyPainter(this.bleed);
-  final double bleed;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromLTRB(-bleed, -32, size.width + bleed, size.height);
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFFFFCF4), GameTheme.cream],
-        ).createShader(rect),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_HomeSkyPainter oldDelegate) => bleed != oldDelegate.bleed;
+  Widget build(BuildContext context) => child;
 }
 
 class _WordGardenPainter extends CustomPainter {
@@ -171,40 +186,6 @@ class _WordGardenPainter extends CustomPainter {
   final List<Offset> centers;
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.save();
-    canvas.translate(-horizontalBleed, 0);
-    final meadowSize = Size(size.width + horizontalBleed * 2, size.height);
-    _hill(canvas, meadowSize, size.height - 18, const Color(0xFFD1DDB8), 34);
-    _hill(canvas, meadowSize, size.height - 6, const Color(0xFFB6D0A8), 19);
-    canvas.restore();
-    _plant(
-      canvas,
-      Offset(17, size.height + 3),
-      91,
-      72,
-      const Color(0xFF5E9F84),
-    );
-    _plant(
-      canvas,
-      Offset(size.width - 18, size.height),
-      size.height * .86,
-      66,
-      const Color(0xFF83B69B),
-    );
-    _plant(
-      canvas,
-      Offset(size.width - 1, size.height + 3),
-      size.height * .59,
-      63,
-      const Color(0xFF3B8874),
-    );
-    _plant(
-      canvas,
-      Offset(size.width * .57, size.height + 5),
-      59,
-      47,
-      const Color(0xFF46917B),
-    );
     final g = centers[0], a = centers[1], o = centers[2], t = centers[3];
     final path = Path()
       ..moveTo(g.dx, g.dy)

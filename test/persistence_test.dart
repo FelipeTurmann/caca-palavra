@@ -327,7 +327,7 @@ void main() {
     },
   );
   test(
-    'paid and free reveals share positions, exclude solved words and stop before last cell',
+    'paid and free reveals share positions, skip found words and complete the round',
     () async {
       await c.close();
       await databaseFactoryFfi.deleteDatabase(location);
@@ -348,10 +348,8 @@ void main() {
         hasLength(records.length),
       );
       expect(c.engine.state.revealedLetters['GATO'], isNull);
-      expect(c.engine.state.revealedLetters['GOTA'], hasLength(3));
-      expect(c.engine.state.revealedLetters['ATO'], hasLength(2));
-      await word('GOTA');
-      await word('ATO');
+      expect(c.engine.state.revealedLetters['GOTA'], hasLength(4));
+      expect(c.engine.state.revealedLetters['ATO'], hasLength(3));
       expect(c.profile.completed, {1});
     },
   );
@@ -649,7 +647,7 @@ void main() {
     },
   );
   test(
-    'Explorer bonus still pays when no hidden position is eligible',
+    'finished rounds reject extras without issuing a new Explorer bonus',
     () async {
       await c.close();
       await databaseFactoryFfi.deleteDatabase(location);
@@ -659,9 +657,10 @@ void main() {
       final balance = c.profile.balance;
       final result = await word('TOGA');
       expect(result.revealedLetter, isNull);
-      expect(result.explorerUnlocked, true);
-      expect(c.profile.balance, balance + 10);
-      expect(c.profile.explorerRewardedLevels, {1});
+      expect(result.kind, SubmissionKind.ignored);
+      expect(result.explorerUnlocked, false);
+      expect(c.profile.balance, balance);
+      expect(c.profile.explorerRewardedLevels, isEmpty);
     },
   );
 }

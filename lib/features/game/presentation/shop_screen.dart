@@ -8,7 +8,7 @@ import 'home_screen.dart';
 import 'widgets/ad_free_plan_card.dart';
 
 Future<void> openShop(BuildContext context, GameController controller) async {
-  if (controller.shopOpen) return;
+  if (controller.shopOpen || controller.themesOpen) return;
   controller.shopOpen = true;
   controller.cancelTransientPresentation();
   try {

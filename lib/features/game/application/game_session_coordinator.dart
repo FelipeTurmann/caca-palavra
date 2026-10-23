@@ -36,6 +36,8 @@ Map<String, dynamic> submissionJson(SubmissionResult result) => {
   'completed': result.completed,
   'explorerUnlocked': result.explorerUnlocked,
   'reveal': revealJson(result.revealedLetter),
+  if (result.resolvedWord != null)
+    'resolvedDisplay': result.resolvedWord!.display,
 };
 SubmissionResult submissionFromJson(Map<String, dynamic> json) =>
     SubmissionResult(
@@ -46,12 +48,22 @@ SubmissionResult submissionFromJson(Map<String, dynamic> json) =>
       completed: json['completed'] == true,
       explorerUnlocked: json['explorerUnlocked'] == true,
       revealedLetter: revealFromJson(json['reveal']),
+      resolvedWord: json['resolvedDisplay'] == null
+          ? null
+          : WordEntry(json['resolvedDisplay'] as String),
     );
 
 class HintOutcome {
-  const HintOutcome(this.status, [this.reveal]);
+  const HintOutcome(this.status, [this.reveal, this.submission]);
   final String status;
   final LetterReveal? reveal;
+  final SubmissionResult? submission;
+
+  factory HintOutcome.fromSaved(Map<String, dynamic> saved) => HintOutcome(
+    'purchased',
+    revealFromJson(saved['reveal']),
+    saved['submission'] == null ? null : submissionFromJson(saved),
+  );
 }
 
 class SuperHintOutcome {
@@ -409,7 +421,9 @@ class GameSessionCoordinator {
     final result = await _save(failed);
     _restore(completing: result['completed'] == true);
     freshCompletion = result['completed'] == true;
-    if (result['kind'] == 'submission' || result['kind'] == 'super_hint') {
+    if (result['kind'] == 'submission' ||
+        result['kind'] == 'super_hint' ||
+        (result['kind'] == 'hint' && result['submission'] != null)) {
       engine.emitCommitted(submissionFromJson(result));
     }
     return result;
@@ -510,11 +524,14 @@ class GameSessionCoordinator {
         proposed = outcome.$1;
         coins = outcome.$2;
         id = coins.single.id;
-      } else if (result.explorerUnlocked && mode == GameMode.campaign) {
-        id = 'explorer-reward:${round.levelId}';
+      }
+      if (result.explorerUnlocked && mode == GameMode.campaign) {
+        final explorerId = 'explorer-reward:${round.levelId}';
+        if (!result.completed) id = explorerId;
         coins = [
+          ...coins,
           CoinOperation(
-            id: id,
+            id: explorerId,
             kind: 'explorer_reward',
             amount: Economy.explorerReward,
             levelId: round.levelId,
@@ -534,7 +551,7 @@ class GameSessionCoordinator {
           id: id,
           expectedRevision: profile.revision,
           request: {
-            ..._request(coins.isEmpty ? 'word' : coins.single.kind, ctx),
+            ..._request(coins.length == 1 ? coins.single.kind : 'word', ctx),
             'ids': ids,
           },
           profile: proposed,
@@ -598,10 +615,7 @@ class GameSessionCoordinator {
         }
         profile = await repository.load(data);
         _restore();
-        return HintOutcome(
-          'purchased',
-          revealFromJson(receipt.result['reveal']),
-        );
+        return HintOutcome.fromSaved(receipt.result);
       }
       await _guard(ctx);
       if (roundId != null && roundId != ctx.roundId) {
@@ -613,28 +627,57 @@ class GameSessionCoordinator {
         return const HintOutcome('insufficient');
       }
       final reveal = candidate.revealPaidHint(id)!;
+      final resolved = candidate.state.targets.contains(reveal.targetKey)
+          ? candidate.state.level.words.firstWhere(
+              (w) => w.key == reveal.targetKey,
+            )
+          : null;
+      final result = resolved == null
+          ? null
+          : SubmissionResult(
+              SubmissionKind.hintResolved,
+              word: resolved,
+              revealedLetter: reveal,
+              completed: candidate.state.phase == RoundPhase.completing,
+            );
+      var proposed = _withRound(
+        candidate.snapshot(ctx.roundId),
+      ).copyWith(balance: profile.balance - Economy.hintPrice);
+      final coins = [
+        CoinOperation(
+          id: id,
+          kind: 'paid_hint',
+          amount: -Economy.hintPrice,
+          levelId: ctx.levelId,
+          roundId: ctx.roundId,
+        ),
+      ];
+      if (result?.completed == true) {
+        final outcome = _completion(proposed, ctx);
+        proposed = outcome.$1;
+        coins.addAll(outcome.$2);
+      }
       final saved = await _save(
         SaveProposal(
           id: id,
           expectedRevision: profile.revision,
           request: request,
-          profile: _withRound(
-            candidate.snapshot(ctx.roundId),
-          ).copyWith(balance: profile.balance - Economy.hintPrice),
-          coins: [
-            CoinOperation(
-              id: id,
-              kind: 'paid_hint',
-              amount: -Economy.hintPrice,
-              levelId: ctx.levelId,
-              roundId: ctx.roundId,
-            ),
-          ],
-          result: {'kind': 'hint', 'reveal': revealJson(reveal)},
+          profile: proposed,
+          coins: coins,
+          result: {
+            if (result != null) ...submissionJson(result),
+            'kind': 'hint',
+            'reveal': revealJson(reveal),
+          },
         ),
       );
-      _restore();
-      return HintOutcome('purchased', revealFromJson(saved['reveal']));
+      final confirmed = HintOutcome.fromSaved(saved);
+      freshCompletion = confirmed.submission?.completed == true;
+      _restore(completing: freshCompletion);
+      if (confirmed.submission != null) {
+        engine.emitCommitted(confirmed.submission!);
+      }
+      return confirmed;
     });
   }
 

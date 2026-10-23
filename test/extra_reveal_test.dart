@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:caca_palavra/features/game/domain/game_engine.dart';
+import 'package:caca_palavra/features/game/domain/round_snapshot.dart';
 import 'helpers.dart';
 
 class RevealRandom implements Random {
@@ -127,37 +128,62 @@ void main() {
       for (final extra in permutations('ABCD').take(4)) {
         submitWord(fixture, extra);
       }
-      expect(fixture.state.revealedLetters['ABC'], {0, 1});
-      expect(fixture.state.revealedLetters['ABD'], {0, 1});
-      expect(fixture.state.targets, isEmpty);
+      expect(fixture.state.revealedLetters['ABC'], {0, 1, 2});
+      expect(fixture.state.revealedLetters['ABD'], {0});
+      expect(fixture.state.targets, {'ABC'});
     },
   );
 
+  test('extras complete words and the last cell locks the finished round', () {
+    final engine = crowdedLevel();
+    for (final extra in permutations('ABCD')) {
+      final count = hintCount(engine.state);
+      final result = submitWord(engine, extra);
+      expect(
+        result.kind,
+        count < 9 ? SubmissionKind.extraFound : SubmissionKind.ignored,
+      );
+      expect(hintCount(engine.state), count < 9 ? count + 1 : 9);
+      expect(result.revealedLetter == null, count >= 9);
+      expect(result.completed, count == 8);
+      if (count < 9 && count % 3 == 2) {
+        expect(result.resolvedWord, isNotNull);
+        expect(engine.state.targets, contains(result.resolvedWord!.key));
+      }
+      expect(
+        engine.state.phase,
+        count < 8 ? RoundPhase.playing : RoundPhase.completing,
+      );
+    }
+    expect(engine.state.extras.length, 9);
+    expect(engine.state.explorerUnlocked, isTrue);
+    expect(engine.state.targets, {'ABC', 'ABD', 'ACD'});
+    expect(
+      engine.fork(engine.snapshot('round')).state.targets,
+      engine.state.targets,
+    );
+    expect(engine.state.phase, RoundPhase.completing);
+  });
+
   test(
-    'saturation keeps one hidden cell in every word and still registers all extras',
+    'fully revealed words must be saved as found; partial legacy hints still restore',
     () {
       final engine = crowdedLevel();
-      for (final extra in permutations('ABCD')) {
-        final count = hintCount(engine.state);
-        final result = submitWord(engine, extra);
-        expect(result.kind, SubmissionKind.extraFound);
-        expect(hintCount(engine.state), count < 6 ? count + 1 : 6);
-        expect(result.revealedLetter == null, count >= 6);
-        for (final word in engine.state.level.words) {
-          expect(
-            engine.state.revealedLetters[word.key]?.length ?? 0,
-            lessThan(word.letters.length),
-          );
-        }
-        expect(engine.state.phase, RoundPhase.playing);
-        expect(engine.state.targets, isEmpty);
+      final extras = permutations('ABCD');
+      for (final extra in extras.take(2)) {
+        submitWord(engine, extra);
       }
-      expect(engine.state.extras.length, 24);
-      expect(engine.state.explorerUnlocked, isTrue);
-      for (final word in engine.state.level.words) {
-        submitWord(engine, word.key);
-      }
-      expect(engine.state.phase, RoundPhase.completing);
+      expect(engine.fork(engine.snapshot('round')).state.targets, isEmpty);
+      final result = submitWord(engine, extras[2]);
+      expect(result.resolvedWord!.key, 'ABC');
+      expect(result.completed, false);
+      final saved = engine.snapshot('round');
+      expect(engine.fork(saved).state.targets, {'ABC'});
+      final invalid = RoundSnapshot.fromJson({
+        ...saved.toJson(),
+        'targets': <String>[],
+      });
+      expect(() => engine.restoreRound(invalid), throwsFormatException);
     },
   );
 

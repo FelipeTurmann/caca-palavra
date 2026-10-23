@@ -17,6 +17,7 @@ abstract final class GameTiming {
   static const pulse = Duration(milliseconds: 300);
   static const wordCelebration = Duration(milliseconds: 600);
   static const extraCollect = Duration(milliseconds: 800);
+  static const coinCollect = Duration(milliseconds: 1100);
   static const explorerCelebration = Duration(milliseconds: 1800);
 }
 
@@ -71,6 +72,7 @@ class GameController extends ChangeNotifier {
   final AdFreePlanController adFreePlan;
   late final FeedbackCoordinator effects;
   bool settingsOpen = false;
+  bool themesOpen = false;
   bool freshVictory = false;
   int victorySerial = 0;
   final Set<String> _acceptedPresentations = {};
@@ -87,6 +89,7 @@ class GameController extends ChangeNotifier {
           _disposed ||
           !effects.active ||
           settingsOpen ||
+          themesOpen ||
           shopOpen) {
         return;
       }
@@ -278,7 +281,9 @@ class GameController extends ChangeNotifier {
       }
       if (result?['kind'] == 'hint') {
         paidReveal = revealFromJson(result!['reveal']);
-        if (paidReveal != null) {
+        if (result['submission'] != null) {
+          _accept(submissionFromJson(result));
+        } else if (paidReveal != null) {
           effects.emit(
             FeedbackCue.reveal,
             id: 'hint:$_effectRound:${paidReveal!.targetKey}:${paidReveal!.index}',
@@ -301,7 +306,9 @@ class GameController extends ChangeNotifier {
       expected: expected,
     );
     paidReveal = effects.active ? result.reveal : null;
-    if (result.reveal != null) {
+    if (result.submission != null) {
+      _accept(result.submission!);
+    } else if (result.reveal != null) {
       effects.emit(
         FeedbackCue.reveal,
         id: 'hint:$_effectRound:${result.reveal!.targetKey}:${result.reveal!.index}',
@@ -347,6 +354,7 @@ class GameController extends ChangeNotifier {
       !dailyInvalid &&
       !shopOpen &&
       !settingsOpen &&
+      !themesOpen &&
       !busy &&
       saveError == null;
   String get preview {
@@ -414,9 +422,10 @@ class GameController extends ChangeNotifier {
     final success =
         result.kind == SubmissionKind.targetFound ||
         result.kind == SubmissionKind.extraFound ||
-        result.kind == SubmissionKind.superResolved;
+        result.kind == SubmissionKind.superResolved ||
+        result.kind == SubmissionKind.hintResolved;
     if (success && !_acceptedPresentations.add(eventId)) return;
-    final present = effects.active && !settingsOpen && !shopOpen;
+    final present = effects.active && !settingsOpen && !shopOpen && !themesOpen;
     if (present && result.kind == SubmissionKind.extraFound) {
       _discoveries.add(
         ExtraDiscovery(
@@ -432,7 +441,8 @@ class GameController extends ChangeNotifier {
         : switch (result.kind) {
             SubmissionKind.targetFound => FeedbackCue.correct,
             SubmissionKind.extraFound => FeedbackCue.extra,
-            SubmissionKind.superResolved => FeedbackCue.reveal,
+            SubmissionKind.superResolved ||
+            SubmissionKind.hintResolved => FeedbackCue.reveal,
             SubmissionKind.unknownWord ||
             SubmissionKind.tooShort => FeedbackCue.invalid,
             _ => null,

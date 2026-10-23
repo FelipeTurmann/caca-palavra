@@ -2,7 +2,7 @@ import 'dart:async';
 import 'core/monetization/ad_free_plan.dart';
 import 'core/preferences/player_preferences.dart';
 import 'core/feedback/game_feedback.dart';
-import 'core/widgets/garden.dart';
+import 'core/theme/visual_theme_catalog.dart';
 import 'core/widgets/motion_policy.dart';
 import 'package:flutter/material.dart';
 import 'core/theme/game_theme.dart';
@@ -141,14 +141,17 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
         listenable: preferences,
         builder: (context, _) {
           final media = MediaQuery.of(context);
-          return MotionPolicy(
-            systemReduced: media.disableAnimations,
-            child: MediaQuery(
-              data: media.copyWith(
-                disableAnimations:
-                    media.disableAnimations || preferences.value.reduceMotion,
+          return VisualThemeScope(
+            theme: preferences.value.visualTheme,
+            child: MotionPolicy(
+              systemReduced: media.disableAnimations,
+              child: MediaQuery(
+                data: media.copyWith(
+                  disableAnimations:
+                      media.disableAnimations || preferences.value.reduceMotion,
+                ),
+                child: child!,
               ),
-              child: child!,
             ),
           );
         },
@@ -193,10 +196,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
         }
         if (!snapshot.hasData) {
           return const Scaffold(
-            body: Garden(
-              quiet: true,
-              child: Center(child: CircularProgressIndicator()),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
         final controller = snapshot.requireData;

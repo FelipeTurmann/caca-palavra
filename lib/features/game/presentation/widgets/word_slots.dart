@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/game_theme.dart';
+import '../../../../core/theme/visual_theme_catalog.dart';
 import '../../domain/game_engine.dart';
 import '../game_controller.dart';
 
@@ -24,6 +25,7 @@ class WordSlots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
+    final bees = VisualThemeScope.of(context).isBees;
     return Semantics(
       label: found
           ? 'Palavra encontrada: ${word.display}'
@@ -98,13 +100,15 @@ class WordSlots extends StatelessWidget {
                               ? GameTheme.teal
                               : revealed.contains(index)
                               ? const Color(0xFFFFEDB7)
-                              : Colors.white.withValues(alpha: 0.45),
+                              : const Color(0xF2FFF9EE),
                           borderRadius: BorderRadius.circular(9),
                           border: Border.all(
                             color: found
                                 ? GameTheme.lightTeal
                                 : revealed.contains(index)
                                 ? GameTheme.gold
+                                : bees
+                                ? const Color(0xFFD7A249)
                                 : GameTheme.slotBorder,
                             width: 1.5,
                           ),

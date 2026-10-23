@@ -60,6 +60,7 @@ enum SubmissionKind {
   extraRepeated,
   unknownWord,
   superResolved,
+  hintResolved,
 }
 
 class SubmissionResult {
@@ -69,12 +70,14 @@ class SubmissionResult {
     this.completed = false,
     this.explorerUnlocked = false,
     this.revealedLetter,
+    this.resolvedWord,
   });
   final SubmissionKind kind;
   final WordEntry? word;
   final bool completed;
   final bool explorerUnlocked;
   final LetterReveal? revealedLetter;
+  final WordEntry? resolvedWord;
 }
 
 class LetterReveal {
@@ -221,12 +224,19 @@ class GameEngine {
       if (!repeated) {
         _state = state.copyWith(extras: {...state.extras, key: lexicon[key]!});
       }
+      final reveal = repeated
+          ? null
+          : _revealRandomLetter(RevealSource.extra, key);
+      final resolved =
+          reveal != null && state.targets.contains(reveal.targetKey)
+          ? state.level.words.firstWhere((word) => word.key == reveal.targetKey)
+          : null;
       result = SubmissionResult(
         repeated ? SubmissionKind.extraRepeated : SubmissionKind.extraFound,
         word: lexicon[key],
-        revealedLetter: repeated
-            ? null
-            : _revealRandomLetter(RevealSource.extra, key),
+        revealedLetter: reveal,
+        resolvedWord: resolved,
+        completed: !repeated && state.phase == RoundPhase.completing,
         explorerUnlocked:
             !repeated && state.extras.length == state.level.extraGoal,
       );
@@ -324,7 +334,7 @@ class GameEngine {
         (word) =>
             !state.targets.contains(word.key) &&
             (state.revealedLetters[word.key]?.length ?? 0) <
-                word.letters.length - 1,
+                word.letters.length,
       );
 
   LetterReveal? _revealRandomLetter(RevealSource source, String sourceKey) {
@@ -333,7 +343,7 @@ class GameEngine {
           (word) =>
               !state.targets.contains(word.key) &&
               (state.revealedLetters[word.key]?.length ?? 0) <
-                  word.letters.length - 1,
+                  word.letters.length,
         )
         .toList();
     if (eligibleWords.isEmpty) return null;
@@ -344,11 +354,16 @@ class GameEngine {
         if (!revealed.contains(index)) index,
     ];
     final index = emptySlots[_random.nextInt(emptySlots.length)];
+    final indices = {...revealed, index};
+    final targets = indices.length == word.letters.length
+        ? {...state.targets, word.key}
+        : state.targets;
     _state = state.copyWith(
-      revealedLetters: {
-        ...state.revealedLetters,
-        word.key: {...revealed, index},
-      },
+      targets: targets,
+      phase: targets.length == state.level.words.length
+          ? RoundPhase.completing
+          : RoundPhase.playing,
+      revealedLetters: {...state.revealedLetters, word.key: indices},
       revealOrigins: [
         ...state.revealOrigins,
         RevealRecord(
@@ -481,9 +496,7 @@ class GameEngine {
       final indices = reveals.putIfAbsent(word.key, () => <int>{});
       if (reveal.index < 0 ||
           reveal.index >= word.letters.length ||
-          !indices.add(reveal.index) ||
-          (indices.length >= word.letters.length &&
-              !assisted.containsKey(word.key))) {
+          !indices.add(reveal.index)) {
         invalid('posição revelada inválida.');
       }
       if (reveal.source != RevealSource.superHint &&
@@ -496,15 +509,13 @@ class GameEngine {
       }
     }
     for (final entry in reveals.entries) {
-      final normal = snapshot.reveals
-          .where(
-            (r) =>
-                r.targetKey == entry.key && r.source != RevealSource.superHint,
-          )
+      final length = level.words
+          .firstWhere((w) => w.key == entry.key)
+          .letters
           .length;
-      if (normal >=
-          level.words.firstWhere((w) => w.key == entry.key).letters.length) {
-        invalid('dica comum resolveu palavra.');
+      if (entry.value.length == length &&
+          !snapshot.targets.contains(entry.key)) {
+        invalid('palavra totalmente revelada sem conclusão.');
       }
     }
     for (final resolution in snapshot.superHints) {

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 import '../../../core/widgets/garden.dart';
+import '../../../core/widgets/lagoon.dart';
+import '../../../core/widgets/themed_reading_page.dart';
 import 'settings_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../core/theme/game_theme.dart';
@@ -120,7 +122,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 ? 'Você tem $balance moedas. Faltam ${price - balance} ${superHint ? 'para usar a Super Dica.' : 'para esta dica.'}'
                 : superHint
                 ? 'Resolve a palavra com mais letras escondidas. Se houver empate, uma delas será sorteada. Você tem $balance moedas.'
-                : 'Uma letra de uma palavra será revelada por 30 moedas. Você tem $balance moedas.',
+                : 'Uma letra de uma palavra será revelada por 30 moedas. Se for a última letra, a palavra será completada. Você tem $balance moedas.',
           ),
           actions: [
             TextButton(
@@ -187,6 +189,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           children: [
             Garden(
               quiet: true,
+              immersive: true,
               child: SafeArea(
                 child: controller.dailyInvalid
                     ? Center(
@@ -265,48 +268,54 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             math.min(math.max(224.0, height * 0.42), 320.0),
                             constraints.maxWidth - 32,
                           );
-                          final answers = ListView(
-                            key: ValueKey(
-                              'answers-${controller.state.session}',
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            children: [
-                              for (final word in controller.state.level.words)
-                                WordSlots(
-                                  word: word,
-                                  celebrate:
-                                      controller.feedback?.kind ==
-                                          SubmissionKind.targetFound &&
-                                      controller.feedback?.completed == false &&
-                                      controller.feedback?.word?.key ==
-                                          word.key,
-                                  revealed:
-                                      controller.state.revealedLetters[word
-                                          .key] ??
-                                      const {},
-                                  found: controller.state.targets.contains(
-                                    word.key,
+                          final answers = ThemedReadingPage(
+                            child: ListView(
+                              key: ValueKey(
+                                'answers-${controller.state.session}',
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              children: [
+                                for (final word in controller.state.level.words)
+                                  WordSlots(
+                                    word: word,
+                                    celebrate:
+                                        controller.feedback?.kind ==
+                                            SubmissionKind.targetFound &&
+                                        controller.feedback?.completed ==
+                                            false &&
+                                        controller.feedback?.word?.key ==
+                                            word.key,
+                                    revealed:
+                                        controller.state.revealedLetters[word
+                                            .key] ??
+                                        const {},
+                                    found: controller.state.targets.contains(
+                                      word.key,
+                                    ),
+                                    pulse:
+                                        (controller.feedback?.kind ==
+                                                        SubmissionKind
+                                                            .targetFound ||
+                                                    controller.feedback?.kind ==
+                                                        SubmissionKind
+                                                            .superResolved) &&
+                                                controller
+                                                        .feedback
+                                                        ?.word
+                                                        ?.key ==
+                                                    word.key ||
+                                            controller
+                                                    .feedback
+                                                    ?.revealedLetter
+                                                    ?.targetKey ==
+                                                word.key ||
+                                            controller.paidReveal?.targetKey ==
+                                                word.key
+                                        ? controller.feedbackSerial
+                                        : 0,
                                   ),
-                                  pulse:
-                                      (controller.feedback?.kind ==
-                                                      SubmissionKind
-                                                          .targetFound ||
-                                                  controller.feedback?.kind ==
-                                                      SubmissionKind
-                                                          .superResolved) &&
-                                              controller.feedback?.word?.key ==
-                                                  word.key ||
-                                          controller
-                                                  .feedback
-                                                  ?.revealedLetter
-                                                  ?.targetKey ==
-                                              word.key ||
-                                          controller.paidReveal?.targetKey ==
-                                              word.key
-                                      ? controller.feedbackSerial
-                                      : 0,
-                                ),
-                            ],
+                              ],
+                            ),
                           );
                           final largeText = scale > 1.3;
                           final progressText =
@@ -400,10 +409,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                   ],
                                 ),
                                 const SizedBox(height: 5),
-                                const Text(
-                                  'Arraste para ligar as letras',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14),
+                                const LagoonReadingSurface(
+                                  child: Text(
+                                    'Arraste para ligar as letras',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 14),
+                                  ),
                                 ),
                               ],
                             );
@@ -646,10 +657,10 @@ class _HintTools extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       style: IconButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        backgroundColor: gold
-            ? const Color(0xFFFFEDB7)
-            : const Color(0xFFD9EBE6),
+        backgroundColor: const Color(0xFAFFF9EE),
         foregroundColor: gold ? const Color(0xFF795100) : GameTheme.teal,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        side: const BorderSide(color: Color(0xFFE8CBA2)),
       ),
       onPressed: controller.interactive && !controller.dragging ? action : null,
       icon: Column(
@@ -783,45 +794,57 @@ class _WideRound extends StatelessWidget {
                                   ],
                                 ),
                                 Expanded(
-                                  child: ListView(
-                                    key: ValueKey(
-                                      'answers-${controller.state.session}',
+                                  child: ThemedReadingPage(
+                                    child: ListView(
+                                      key: ValueKey(
+                                        'answers-${controller.state.session}',
+                                      ),
+                                      children: [
+                                        for (final word
+                                            in controller.state.level.words)
+                                          WordSlots(
+                                            word: word,
+                                            celebrate:
+                                                controller.feedback?.kind ==
+                                                    SubmissionKind
+                                                        .targetFound &&
+                                                controller
+                                                        .feedback
+                                                        ?.completed ==
+                                                    false &&
+                                                controller
+                                                        .feedback
+                                                        ?.word
+                                                        ?.key ==
+                                                    word.key,
+                                            found: controller.state.targets
+                                                .contains(word.key),
+                                            revealed:
+                                                controller
+                                                    .state
+                                                    .revealedLetters[word
+                                                    .key] ??
+                                                const {},
+                                            pulse:
+                                                controller
+                                                            .feedback
+                                                            ?.word
+                                                            ?.key ==
+                                                        word.key ||
+                                                    controller
+                                                            .paidReveal
+                                                            ?.targetKey ==
+                                                        word.key ||
+                                                    controller
+                                                            .feedback
+                                                            ?.revealedLetter
+                                                            ?.targetKey ==
+                                                        word.key
+                                                ? controller.feedbackSerial
+                                                : 0,
+                                          ),
+                                      ],
                                     ),
-                                    children: [
-                                      for (final word
-                                          in controller.state.level.words)
-                                        WordSlots(
-                                          word: word,
-                                          celebrate:
-                                              controller.feedback?.kind ==
-                                                  SubmissionKind.targetFound &&
-                                              controller.feedback?.completed ==
-                                                  false &&
-                                              controller.feedback?.word?.key ==
-                                                  word.key,
-                                          found: controller.state.targets
-                                              .contains(word.key),
-                                          revealed:
-                                              controller
-                                                  .state
-                                                  .revealedLetters[word.key] ??
-                                              const {},
-                                          pulse:
-                                              controller.feedback?.word?.key ==
-                                                      word.key ||
-                                                  controller
-                                                          .paidReveal
-                                                          ?.targetKey ==
-                                                      word.key ||
-                                                  controller
-                                                          .feedback
-                                                          ?.revealedLetter
-                                                          ?.targetKey ==
-                                                      word.key
-                                              ? controller.feedbackSerial
-                                              : 0,
-                                        ),
-                                    ],
                                   ),
                                 ),
                                 Text(

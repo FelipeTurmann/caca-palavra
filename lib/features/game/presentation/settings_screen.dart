@@ -8,7 +8,9 @@ Future<void> openSettings(
   BuildContext context,
   GameController controller,
 ) async {
-  if (controller.settingsOpen || controller.shopOpen) return;
+  if (controller.settingsOpen || controller.shopOpen || controller.themesOpen) {
+    return;
+  }
   controller.settingsOpen = true;
   controller.cancelTransientPresentation();
   try {
@@ -165,5 +167,10 @@ class SettingsButton extends StatelessWidget {
         ? null
         : () => openSettings(context, controller),
     icon: const Icon(Icons.settings_rounded),
+    style: IconButton.styleFrom(
+      backgroundColor: const Color(0xF7FFF9EE),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      side: const BorderSide(color: Color(0xFFEED6AE)),
+    ),
   );
 }

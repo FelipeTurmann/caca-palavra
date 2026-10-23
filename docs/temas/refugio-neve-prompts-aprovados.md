@@ -1,0 +1,47 @@
+# Prompts — Refúgio na neve
+
+Data: 23/10/2026. Ferramenta: image_gen integrada, conforme skill imagegen.
+
+## Recursos separados
+
+### 1. snowBackground
+
+Modo: geração de imagem nova. transparent_background: false.
+
+```text
+Use case: game-background. Create ONE portrait 2:3 background illustration for a Brazilian cozy mobile word game theme 'Refúgio na neve'. FULL BLEED opaque scenery only, no UI, no letters, no text, no logo, no mascot, no wheel. Polished 2D CARTOON casual game art, rounded chunky shapes, clean confident outlines with subtly colored contour lines, simple soft cel shading, charming hand-drawn animation feel. NOT photorealistic, NOT detailed painterly 3D, NOT furry realistic textures. A quiet snowy refuge with pale icy blue sky, distant rounded snowy mountains and snow-laden pine trees framing the left and right outer edges. Small wooden cabin with warm amber glowing windows tucked near the LOWER LEFT edge, a low wooden fence and snowy drifts along the bottom. A little frozen stream reflecting pale aqua may run at the very bottom. Warm peach glow at horizon. Very sparse tiny snowflakes ONLY outer edges. IMPORTANT composition: central 65 percent of width must remain bright, calm and light cream-blue with extremely little detail, including middle/lower center where functional game controls will later be overlaid. Large quiet open snowy clearing in central lower half; cabin small, never central. Cozy amber warmth balanced with soft blue snow, teal-green pines. Background must support dark petrol text, cream cards and teal buttons, with no busy dark region in the central reading column. Illustrated original cartoon game aesthetic, friendly and serene.
+```
+
+### 2. snowPenguin
+
+Modo: geração de imagem nova. transparent_background: true.
+
+```text
+Use case: game-mascot cutout. Create ONE adorable original penguin mascot for a cozy casual mobile word game 'Refúgio na neve', isolated on TRUE transparent background. Square canvas. Full body entirely visible with generous clean transparent margin, character centered. Chubby baby penguin with big rounded head, plump oval body, dark petrol/navy back and flippers, warm ivory face and belly, small orange beak and feet, rosy cheeks, big expressive friendly eyes, soft smile. Wearing a chunky CORAL knitted scarf wrapped around neck with short tidy scarf tails to one side; simplified drawn stitches. Two small flippers at its sides. Friendly approachable original character. Strong 2D CARTOON style: clean soft thick colored outlines, big simple rounded shapes, tasteful cel shading and restrained highlights; animation character, not photorealism, no feather microtexture, not a plush photograph, not glossy 3D. Palette harmonious with cream #FFF9EE, petrol #123B49, coral #FF735D and pale snowy blue. No ground, no scenery, no props, no text, no snow particles, no cat, no UI and no shadow extending far beyond feet. Correct transparent alpha, never checkerboard painted into image.
+```
+
+### 3. snowDisc
+
+Modo: geração de imagem nova. transparent_background: true.
+
+```text
+Use case: game-wheel-base cutout. Create ONE large circular translucent pale blue ICE DISC viewed STRAIGHT DOWN, a perfectly round decorative empty base for a mobile letter wheel, isolated on TRUE transparent background. Square canvas, circle center EXACTLY at canvas center x50% y50%, equal margins on all four sides, outer rim diameter about 88% canvas width. Polished friendly 2D CARTOON casual game art with clean rounded outlines, simple cel shading and very restrained icy highlights. Thin softly beveled ice rim, slightly darker pale aqua outer contour, a few short subtle fracture lines ONLY near perimeter, calm translucent very pale icy-blue center with faint mint glow. Calm surface suited to overlaid circular letter tokens later. Keep rotationally balanced geometry; no perspective, no ellipse, no pedestal, no bottom-heavy extrusion. IMPORTANT EMPTY DISC ONLY: NO tokens, NO letters, NO text, NO shuffle button, NO symbols, NO penguin, NO scenery, NO snowflakes floating outside, NO platform beneath. Do not paint white/checkerboard backdrop. Circle must remain centered so existing interactive letter positions align exactly with the artwork. Friendly winter illustration rather than realistic ice photograph.
+```
+
+## Prévia de início e partida
+
+Modo: composição com referências locais. transparent_background: false.
+
+Referências, na ordem enviada:
+
+1. C:/Users/felip/Desktop/dev/workspace/caca-palavra-doc/doc/prototipos-temas/refugio-na-neve-cartoon/01-fundo-refugio-neve-cartoon.png
+2. C:/Users/felip/Desktop/dev/workspace/caca-palavra-doc/doc/prototipos-temas/refugio-na-neve-cartoon/02-pinguim-cartoon.png
+3. C:/Users/felip/Desktop/dev/workspace/caca-palavra-doc/doc/prototipos-temas/refugio-na-neve-cartoon/03-disco-gelo-cartoon.png
+4. C:/Users/felip/Desktop/dev/workspace/caca-palavra-doc/doc/prototipos-temas/escola-de-magia-cartoon/04-previa-inicio-partida.png
+
+```text
+Use case: ui-mockup. Generate ONE polished LANDSCAPE approval board approximately 1536x1024 with TWO equal portrait Android game screens side by side, flat straight-on no hardware, aligned on warm neutral cream presentation background. Theme title above: 'Refúgio na neve · proposta cartoon'. Labels OUTSIDE below screens: 'Início' and 'Partida'. This is a proposed visual skin for EXISTING Flutter word-connect game 'Conecte palavras'. REFERENCE ROLES: reference1 is the exact new snowy scenery art to use for BOTH screen backgrounds; reference2 is the exact cute navy/ivory penguin with coral scarf mascot to use; reference3 is the exact centered pale aqua ice disc for the game wheel; reference4 is approved PREVIOUS theme board, use ONLY its 2D cartoon family, screen proportions, spacing, readable functional hierarchy, typography and layout, never its scenery or dragon or cauldron. Replace ALL magic classroom, crystals, potions, dragon, books, vines and cauldron with snow theme. Match new supplied assets faithfully, do not change mascot. Winter scenery icy-blue sky, rounded snowy mountains, snowy pines at screen edges, low small wooden cabin glowing amber, warm peaceful snow. Strong CARTOON 2D illustration, friendly rounded shapes and outlined characters; no photorealism. Central UI readable at all times. Rounded Nunito-like typography, dark petrol #123B49, cream #FFF9EE/#FFF1D5 reading surfaces, teal #0B5660 buttons, coral #FF735D brand and accent, honey #F4BD4F coins. Cards24px corner radius with fine warm borders and gentle shadow. Not glossy casino. LEFT HOME from top: small cream rounded gear button at top-left and '60 moedas' coin chip top-right. Large two-line centered brand 'Conecte' in dark petrol then 'palavras' in coral. Four decorative cream circular letter chips P A T O joined by coral trail underneath. Penguin wearing coral scarf at lower right of hero, comfortably above progress card. Lower area includes cream card 'Seu progresso' with gold star, subtitle 'Nível 2', progress bar and chevron; large full-width teal play button 'Continuar · Nível 2'; cream card coral calendar icon 'Desafio diário', subtitle 'Um novo desafio por dia', chevron; IMMEDIATELY BELOW daily card include cream 'Temas' card with palette icon and subtitle 'Atual: Refúgio na neve' and chevron. All four lower controls completely visible, readable, no mascot overlap. RIGHT GAME: cream back arrow top-left, separate gear, coin chip '60 moedas' top-right. Cream slim header 'Nível 2' left and gold star 'Extras 0/2' right. Large cream reading panel containing heading 'Encontre 3 palavras'. EXACTLY THREE centered answer rows: row1 EXACTLY FOUR filled TEAL rounded square cells P A T O in WHITE; row2 EXACTLY FOUR EMPTY cream outlined rounded square cells; row3 EXACTLY THREE EMPTY cream outlined rounded square cells. Below '1 de 3 palavras'. No extra rows, no other letters. Beneath panel small crossed AD circular badge on left, small cream horizontal feedback space in center, two stacked cream hint buttons on right showing bulb + coin30 and sparkles + coin100. Bottom-middle LARGE exact pale aqua circular ice disc from reference3. Wheel circle and all interactive elements precisely concentric, no elliptical distortion. EXACTLY FOUR SEPARATE round softly beveled icy pearl-blue letter tokens with HIGH CONTRAST DARK PETROL letters: P at12 o'clock, A at3, T at6, O at9. Tokens entirely INSIDE ice disc rim, equal radius around exact disc center, enough spacing; small pale mint circular shuffle button with dark petrol shuffle icon at exact center. No extra letters, no cream teal tokens carried over from old theme, no petals, no cauldron. Instruction in cream pill below wheel 'Arraste para ligar as letras'. Small penguin in bottom right corner away from all tokens and instruction, no obstruction. Sparse delicate snowflakes only at scene edges away from reading and touch regions. Cozy cabin amber lights near bottom edges. All visible text accurate Brazilian Portuguese with accents. No cat, no new navigation, no marketing, no watermark. Preserve screen margins and original functional structure, only change theme artwork. Ensure all controls fit the portrait screens and neither bottom row nor instruction is clipped.
+```
+
+Não foram feitas edições posteriores nos PNGs gerados. A prévia é ilustrativa; foi aprovada pelo usuário e as artes separadas foram integradas na versão 0.8.0+13. As capturas reais ficam no relatório da implementação.
+

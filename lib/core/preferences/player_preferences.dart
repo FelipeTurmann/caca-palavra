@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import '../theme/visual_theme_catalog.dart';
 
 enum Introduction { unseen, inProgress, completed, skipped, exempted }
 
@@ -11,9 +12,12 @@ class PlayerPreferences {
     this.haptics = true,
     this.reduceMotion = false,
     this.introduction = Introduction.unseen,
+    this.visualThemeId = 'jardim_gatinho',
   });
   final bool sound, haptics, reduceMotion;
   final Introduction introduction;
+  final String visualThemeId;
+  VisualTheme get visualTheme => VisualTheme.resolve(visualThemeId);
   bool get needsIntroduction =>
       introduction == Introduction.unseen ||
       introduction == Introduction.inProgress;
@@ -22,11 +26,13 @@ class PlayerPreferences {
     bool? haptics,
     bool? reduceMotion,
     Introduction? introduction,
+    String? visualThemeId,
   }) => PlayerPreferences(
     sound: sound ?? this.sound,
     haptics: haptics ?? this.haptics,
     reduceMotion: reduceMotion ?? this.reduceMotion,
     introduction: introduction ?? this.introduction,
+    visualThemeId: visualThemeId ?? this.visualThemeId,
   );
   Map<String, Object> toRow() => {
     'id': 'local',
@@ -34,6 +40,7 @@ class PlayerPreferences {
     'haptics': haptics ? 1 : 0,
     'reduce_motion': reduceMotion ? 1 : 0,
     'introduction': introduction.name,
+    'visual_theme_id': visualThemeId,
   };
   factory PlayerPreferences.fromRow(Map<String, Object?> row) =>
       PlayerPreferences(
@@ -41,6 +48,9 @@ class PlayerPreferences {
         haptics: row['haptics'] == 1,
         reduceMotion: row['reduce_motion'] == 1,
         introduction: Introduction.values.byName(row['introduction'] as String),
+        visualThemeId: VisualTheme.resolve(
+          row['visual_theme_id'] as String?,
+        ).id,
       );
 }
 
@@ -95,21 +105,48 @@ class PreferencesController extends ChangeNotifier {
   final PreferencesStore store;
   PlayerPreferences value;
   String? error;
+  bool saving = false;
+  bool themeSaved = false;
+  bool _themeDirty = false;
+  bool get savingTheme => saving && _themeDirty;
+  void clearThemeNotice() {
+    themeSaved = false;
+  }
+
+  Future<void> selectTheme(VisualTheme theme) {
+    if (value.visualTheme == theme) return Future.value();
+    _themeDirty = true;
+    themeSaved = false;
+    return update(value.copyWith(visualThemeId: theme.id));
+  }
+
   Future<void> _tail = Future.value();
   int _revision = 0;
   bool _disposed = false;
   Future<void> update(PlayerPreferences next) {
     value = next;
     error = null;
+    saving = true;
+    if (_themeDirty) themeSaved = false;
     final revision = ++_revision;
     notifyListeners();
     _tail = _tail.then((_) async {
       try {
         await store.write(next);
-        if (revision == _revision) error = null;
+        if (revision == _revision) {
+          error = null;
+          saving = false;
+          if (_themeDirty) {
+            themeSaved = true;
+            _themeDirty = false;
+          }
+        }
       } catch (_) {
         if (revision == _revision) {
-          error = 'Não foi possível salvar esta preferência. Tente novamente.';
+          saving = false;
+          error = _themeDirty
+              ? 'Não foi possível salvar o tema. Tente novamente.'
+              : 'Não foi possível salvar esta preferência. Tente novamente.';
         }
       }
       if (!_disposed) notifyListeners();

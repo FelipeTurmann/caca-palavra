@@ -20,6 +20,7 @@ class SelectionFeedback extends StatelessWidget {
     SubmissionKind.tooShort => 'Use pelo menos 3 letras.',
     SubmissionKind.targetFound => 'Muito bem!',
     SubmissionKind.superResolved => 'Palavra resolvida pela Super Dica!',
+    SubmissionKind.hintResolved => 'Dica completou ${result!.word!.display}!',
     SubmissionKind.targetRepeated => 'Você já encontrou essa palavra.',
     SubmissionKind.extraFound => 'Palavra extra: ${result!.word!.display}',
     SubmissionKind.extraRepeated => 'Essa palavra extra já foi encontrada.',
@@ -35,7 +36,8 @@ class SelectionFeedback extends StatelessWidget {
         result?.kind == SubmissionKind.tooShort;
     final success =
         result?.kind == SubmissionKind.targetFound ||
-        result?.kind == SubmissionKind.superResolved;
+        result?.kind == SubmissionKind.superResolved ||
+        result?.kind == SubmissionKind.hintResolved;
     final extra = result?.kind == SubmissionKind.extraFound;
     final celebrating = controller.celebratingExplorer;
     final scale = MediaQuery.textScalerOf(context).scale(1);
@@ -158,7 +160,9 @@ class SelectionFeedback extends StatelessWidget {
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
-                                    result!.revealedLetter != null
+                                    result!.resolvedWord != null
+                                        ? '${result.resolvedWord!.display} completada!'
+                                        : result.revealedLetter != null
                                         ? 'Uma letra revelada!'
                                         : 'Extras continuam contando.',
                                     style: const TextStyle(
