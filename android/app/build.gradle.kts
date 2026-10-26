@@ -23,6 +23,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // A diagnostic APK can select Skia with -PenableImpeller=false.
+        // Normal builds retain Flutter's default renderer.
+        manifestPlaceholders["enableImpeller"] = providers
+            .gradleProperty("enableImpeller")
+            .orElse("true")
+            .get()
     }
 
     buildTypes {

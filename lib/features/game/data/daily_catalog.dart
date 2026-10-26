@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../application/daily_models.dart';
 import '../domain/game_engine.dart';
 import 'game_data.dart';
+import 'catalog_data.dart';
 
 class DailyCatalog {
   DailyCatalog({
@@ -42,8 +43,8 @@ class DailyCatalog {
       raw,
       await rootBundle.loadString('assets/data/lexicon_pt_br.json'),
     );
-    if (data.levels.length < 7 ||
-        data.levels.map((l) => l.fingerprint).toSet().length !=
+    if (data.levels.length != 7 ||
+        data.levels.map(CatalogData.contentKey).toSet().length !=
             data.levels.length) {
       throw const FormatException(
         'São necessários sete desafios diários distintos.',

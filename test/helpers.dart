@@ -4,7 +4,14 @@ import 'dart:math';
 import 'package:caca_palavra/features/game/data/game_data.dart';
 import 'package:caca_palavra/features/game/domain/game_engine.dart';
 
+// Historical content is a stable fixture for gesture/economy/recovery scenarios.
+// The full shipped catalog is exercised separately in expanded_catalog_test.dart.
 GameData loadData() => GameData.parse(
+  File('test/fixtures/levels_v1.json').readAsStringSync(),
+  File('test/fixtures/lexicon_v1.json').readAsStringSync(),
+);
+
+GameData loadProductionData() => GameData.parse(
   File('assets/data/levels.json').readAsStringSync(),
   File('assets/data/lexicon_pt_br.json').readAsStringSync(),
 );

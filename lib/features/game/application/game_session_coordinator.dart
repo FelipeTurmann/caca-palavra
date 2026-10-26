@@ -8,6 +8,7 @@ import '../domain/round_snapshot.dart';
 import 'campaign_models.dart';
 import 'daily_models.dart';
 import 'shop_models.dart';
+import 'theme_unlocks.dart';
 import '../data/daily_catalog.dart';
 
 String operationId(String prefix) {
@@ -135,6 +136,72 @@ class GameSessionCoordinator {
   int get completionReward => mode == GameMode.daily
       ? Economy.dailyReward
       : profile.pendingCompletion?.reward ?? Economy.levelReward;
+
+  bool isThemeUnlocked(String id) =>
+      ThemeUnlocks.available(id, profile.purchasedThemes, profile.unlocked);
+
+  Future<Map<String, dynamic>> purchaseTheme(String themeId) =>
+      _serial(() async {
+        final rule = ThemeUnlocks.rule(themeId);
+        if (rule.price == null) {
+          return {
+            'kind': 'theme_unlock',
+            'status': isThemeUnlocked(themeId) ? 'available' : 'locked',
+            'themeId': themeId,
+          };
+        }
+        final id = 'theme-unlock:$themeId';
+        final request = <String, dynamic>{
+          'kind': 'theme_unlock',
+          'themeId': themeId,
+          'price': rule.price,
+          'themePriceVersion': ThemeUnlocks.priceVersion,
+        };
+        final receipt = await repository.resolveOperation(id);
+        if (receipt != null) {
+          if (!_sameRequest(receipt.request, request) ||
+              receipt.result['rejected'] == true) {
+            throw OperationMismatch();
+          }
+          profile = await repository.load(data);
+          return receipt.result;
+        }
+        if (_failed != null) throw StateError('Resolva o salvamento pendente.');
+        if (isThemeUnlocked(themeId)) {
+          return {
+            'kind': 'theme_unlock',
+            'status': 'available',
+            'themeId': themeId,
+          };
+        }
+        if (profile.balance < rule.price!) {
+          return {
+            'kind': 'theme_unlock',
+            'status': 'insufficient',
+            'themeId': themeId,
+          };
+        }
+        return _save(
+          SaveProposal(
+            id: id,
+            expectedRevision: profile.revision,
+            request: request,
+            profile: profile.copyWith(
+              balance: profile.balance - rule.price!,
+              revision: profile.revision + 1,
+              purchasedThemes: {...profile.purchasedThemes, themeId},
+            ),
+            coins: [
+              CoinOperation(id: id, kind: 'theme_unlock', amount: -rule.price!),
+            ],
+            result: {
+              'kind': 'theme_unlock',
+              'status': 'purchased',
+              'themeId': themeId,
+            },
+          ),
+        );
+      });
   int? get nextLevelId {
     final index = data.levels.indexWhere((l) => l.id == profile.currentLevelId);
     return index + 1 < data.levels.length ? data.levels[index + 1].id : null;
@@ -882,9 +949,12 @@ class GameSessionCoordinator {
     String id, {
     String? packageId,
   }) async {
+    final isAd = kind == 'simulated_ad' || kind == 'admob_test';
+    final isTestAd = kind == 'admob_test';
     final request = <String, dynamic>{
       'kind': kind,
-      'simulated': true,
+      'simulated': !isTestAd,
+      if (isTestAd) 'testAd': true,
       'packageId': ?packageId,
     };
     final receipt = await repository.resolveOperation(id);
@@ -897,17 +967,19 @@ class GameSessionCoordinator {
       return receipt.result;
     }
     if (_failed != null) throw StateError('Resolva o salvamento pendente.');
-    final provided = kind == 'simulated_ad'
+    final provided = isAd
         ? await adProvider.reward(id)
         : await purchaseProvider.purchase(id, ShopCatalog.find(packageId!));
-    final amount = kind == 'simulated_ad'
+    final amount = isAd
         ? Economy.adReward
         : ShopCatalog.find(packageId!).amount;
     if (provided.orderId != id ||
         provided.source != kind ||
         provided.amount != amount ||
-        provided.packageId != packageId) {
-      throw StateError('Recibo simulado inválido.');
+        provided.packageId != packageId ||
+        provided.simulated != !isTestAd ||
+        provided.testAd != isTestAd) {
+      throw StateError('Recibo da loja inválido.');
     }
     return _save(
       SaveProposal(
@@ -947,8 +1019,14 @@ class GameSessionCoordinator {
     );
   }
 
+  bool get usesAdMobTestAds => adProvider.source == 'admob_test';
+
+  Future<Map<String, dynamic>> watchRewardAd({String? id}) =>
+      _credit(adProvider.source, id ?? operationId('ad'));
+
+  // Kept for existing simulation fixtures and saved-operation tests.
   Future<Map<String, dynamic>> simulateAd({String? id}) =>
-      _credit('simulated_ad', id ?? operationId('ad'));
+      watchRewardAd(id: id);
   Future<bool> advance() {
     final ctx = context, requested = profile.pendingCompletion?.roundId;
     return _serial(() async {

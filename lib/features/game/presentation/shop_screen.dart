@@ -180,21 +180,30 @@ class ShopScreen extends StatelessWidget {
                         ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
-                        key: const ValueKey('simulated-ad'),
+                        key: ValueKey(
+                          controller.coordinator!.usesAdMobTestAds
+                              ? 'rewarded-ad'
+                              : 'simulated-ad',
+                        ),
                         onPressed:
                             controller.busy || controller.saveError != null
                             ? null
                             : () => controller.credit(
-                                () => controller.coordinator!.simulateAd(),
+                                () => controller.coordinator!.watchRewardAd(),
                               ),
                         icon: const Icon(Icons.play_circle_outline_rounded),
-                        label: const Text(
-                          'Assistir anúncio · +15 moedas',
+                        label: Text(
+                          controller.busy
+                              ? 'Aguarde…'
+                              : 'Assistir anúncio · +15 moedas',
                           textAlign: TextAlign.center,
                         ),
                       ),
-                      const Text(
-                        'Simulação: as moedas são concedidas sem exibir vídeo.',
+                      Text(
+                        controller.coordinator!.usesAdMobTestAds
+                            ? 'Anúncio de teste do Google AdMob, sem receita real. '
+                                  'Receba 15 moedas ao concluir a recompensa.'
+                            : 'Simulação: as moedas são concedidas sem exibir vídeo.',
                         textAlign: TextAlign.center,
                       ),
                     ],

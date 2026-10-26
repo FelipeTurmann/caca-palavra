@@ -26,9 +26,11 @@ void main() {
       final data = await GameData.load();
       var repo = await SqliteProgressRepository.open(
         databasePath: location,
-        initialBalance: 140,
+        initialBalance: 890,
       );
       var session = await GameSessionCoordinator.create(data, repo);
+      // The library is bought before this hint-only fixture begins.
+      await session.purchaseTheme('biblioteca_encantada');
       Future<void> mount() async {
         await tester.pumpWidget(
           WordGameApp(
@@ -75,11 +77,17 @@ void main() {
           tester.widget<GameScreen>(find.byType(GameScreen)).controller;
       expect(find.byTooltip('Dica · 50 moedas'), findsOneWidget);
       expect(find.byTooltip('Super Dica · 120 moedas'), findsOneWidget);
+      expect(find.byTooltip('Dica do mascote · 70 moedas'), findsOneWidget);
+      await binding.takeScreenshot('00-botao-dica-mascote');
       final wheelBefore = tester.getRect(
         find.byKey(const ValueKey('letter-wheel')),
       );
       await tap(find.byKey(const ValueKey('mascot-help')));
       expect(find.text(mascotInvitation), findsOneWidget);
+      final largeMascot = tester.getSize(
+        find.byKey(const ValueKey('mascot-character')),
+      );
+      expect(largeMascot.width, greaterThan(100));
       expect(
         tester.getRect(find.byKey(const ValueKey('letter-wheel'))),
         wheelBefore,
@@ -94,6 +102,10 @@ void main() {
       expect(find.text(data.lexicon['GOTA']!.clue!), findsOneWidget);
       expect(session.engine.state.targets, isEmpty);
       expect(session.engine.state.revealedLetters, isEmpty);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('mascot-character'))),
+        largeMascot,
+      );
       final afterFirstPurchase = session.profile.toPayload();
       await tap(find.text('Encontre 3 palavras'));
       expect(controller().mascotOpen, false);
@@ -111,7 +123,7 @@ void main() {
       await controller().leaveToHome();
       await tester.pumpAndSettle();
       await tap(find.byKey(const ValueKey('home-themes')));
-      await tap(find.byKey(const ValueKey('use-theme-refugio_neve')));
+      await tap(find.byKey(const ValueKey('use-theme-biblioteca_encantada')));
       await tap(find.byTooltip('Fechar temas'));
       await tap(find.byKey(const ValueKey('play')));
       await tap(find.byKey(const ValueKey('mascot-clue-GOTA')));
@@ -119,7 +131,7 @@ void main() {
       expect(find.text(data.lexicon['GOTA']!.clue!), findsOneWidget);
       expect(session.profile.toPayload(), saved);
       expect(await repo.database.query('coin_transactions'), ledger);
-      await binding.takeScreenshot('04-reconsulta-neve-saldo-zero');
+      await binding.takeScreenshot('04-reconsulta-biblioteca-saldo-zero');
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
       repo = await SqliteProgressRepository.open(databasePath: location);

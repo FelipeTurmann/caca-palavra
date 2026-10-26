@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../domain/round_snapshot.dart';
 import 'daily_models.dart';
+import 'theme_unlocks.dart';
 
 abstract final class Economy {
   static const initialBalance = 60;
@@ -92,13 +93,15 @@ class CampaignProfile {
     this.hasStarted = false,
     this.pendingCompletion,
     Map<String, DailyProgress> daily = const {},
+    Set<String> purchasedThemes = const {},
     this.lastDailyDate,
   }) : catalogIds = List.unmodifiable(catalogIds),
        unlocked = Set.unmodifiable(unlocked),
        completed = Set.unmodifiable(completed),
        explorerRewardedLevels = Set.unmodifiable(explorerRewardedLevels),
        rounds = Map.unmodifiable(rounds),
-       daily = Map.unmodifiable(daily);
+       daily = Map.unmodifiable(daily),
+       purchasedThemes = Set.unmodifiable(purchasedThemes);
   final int balance;
   final int revision;
   final int currentLevelId;
@@ -111,6 +114,7 @@ class CampaignProfile {
   final Map<int, RoundSnapshot> rounds;
   final PendingCompletion? pendingCompletion;
   final Map<String, DailyProgress> daily;
+  final Set<String> purchasedThemes;
   final String? lastDailyDate;
   RoundSnapshot? get currentRound => rounds[currentLevelId];
   bool get campaignComplete =>
@@ -129,9 +133,11 @@ class CampaignProfile {
     PendingCompletion? pendingCompletion,
     bool clearPending = false,
     Map<String, DailyProgress>? daily,
+    Set<String>? purchasedThemes,
     String? lastDailyDate,
   }) => CampaignProfile(
     daily: daily ?? this.daily,
+    purchasedThemes: purchasedThemes ?? this.purchasedThemes,
     lastDailyDate: lastDailyDate ?? this.lastDailyDate,
     balance: balance ?? this.balance,
     revision: revision ?? this.revision,
@@ -150,6 +156,8 @@ class CampaignProfile {
   );
   Map<String, Object?> toPayload() => {
     'schemaVersion': 2,
+    if (purchasedThemes.isNotEmpty)
+      'purchasedThemes': purchasedThemes.toList()..sort(),
     'daily': {
       for (final entry in daily.entries) entry.key: entry.value.toJson(),
     },
@@ -180,6 +188,13 @@ class CampaignProfile {
       throw const FormatException('Carteira duplicada no progresso.');
     }
     final unlocked = List<int>.from(payload['unlockedLevelIds'] as List);
+    final themes = List<String>.from(
+      payload['purchasedThemes'] as List? ?? const [],
+    );
+    if (themes.toSet().length != themes.length ||
+        themes.any((id) => ThemeUnlocks.rules[id]?.price == null)) {
+      throw const FormatException('Desbloqueios de temas inválidos.');
+    }
     final completed = List<int>.from(payload['completedLevelIds'] as List);
     // Older saves may contain visual badges earned before the coin reward.
     final explorerRewards = List<int>.from(
@@ -191,6 +206,7 @@ class CampaignProfile {
       throw const FormatException('Progresso duplicado.');
     }
     return CampaignProfile(
+      purchasedThemes: themes.toSet(),
       daily: {
         for (final entry
             in (payload['daily'] as Map<String, dynamic>? ?? {}).entries)

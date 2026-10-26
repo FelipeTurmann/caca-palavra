@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "language": "pt-BR",
+  "minimumWordLength": 3,
+  "levels": [
+    {
+      "id": 1,
+      "extraGoal": 1,
+      "difficulty": "introducao",
+      "letters": [
+        "G",
+        "A",
+        "T",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "GATO"
+        },
+        {
+          "display": "GOTA"
+        },
+        {
+          "display": "ATO"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "extraGoal": 2,
+      "difficulty": "introducao",
+      "letters": [
+        "P",
+        "A",
+        "T",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "PATO"
+        },
+        {
+          "display": "TOPA"
+        },
+        {
+          "display": "ATO"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "extraGoal": 2,
+      "difficulty": "introducao",
+      "letters": [
+        "B",
+        "O",
+        "L",
+        "A"
+      ],
+      "words": [
+        {
+          "display": "BOLA"
+        },
+        {
+          "display": "BOA"
+        },
+        {
+          "display": "OLÁ"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "extraGoal": 2,
+      "difficulty": "facil",
+      "letters": [
+        "A",
+        "C",
+        "A",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "AÇÃO"
+        },
+        {
+          "display": "AÇO"
+        },
+        {
+          "display": "OCA"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "extraGoal": 3,
+      "difficulty": "facil",
+      "letters": [
+        "P",
+        "A",
+        "T",
+        "R",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "PRATO"
+        },
+        {
+          "display": "PORTA"
+        },
+        {
+          "display": "ROTA"
+        },
+        {
+          "display": "RATO"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "extraGoal": 3,
+      "difficulty": "facil",
+      "letters": [
+        "C",
+        "A",
+        "R",
+        "O",
+        "S"
+      ],
+      "words": [
+        {
+          "display": "CAROS"
+        },
+        {
+          "display": "ARCOS"
+        },
+        {
+          "display": "RASO"
+        },
+        {
+          "display": "CASO"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "extraGoal": 3,
+      "difficulty": "intermediario",
+      "letters": [
+        "C",
+        "A",
+        "N",
+        "T",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "CANTO"
+        },
+        {
+          "display": "CONTA"
+        },
+        {
+          "display": "CÃO"
+        },
+        {
+          "display": "ANO"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "extraGoal": 3,
+      "difficulty": "intermediario",
+      "letters": [
+        "P",
+        "E",
+        "D",
+        "R",
+        "A"
+      ],
+      "words": [
+        {
+          "display": "PEDRA"
+        },
+        {
+          "display": "PADRE"
+        },
+        {
+          "display": "PERDA"
+        },
+        {
+          "display": "PARE"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "extraGoal": 3,
+      "difficulty": "intermediario",
+      "letters": [
+        "P",
+        "A",
+        "S",
+        "T",
+        "A",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "PASTA"
+        },
+        {
+          "display": "PASTO"
+        },
+        {
+          "display": "POSTA"
+        },
+        {
+          "display": "SAPATO"
+        },
+        {
+          "display": "APOSTA"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "extraGoal": 3,
+      "difficulty": "intermediario",
+      "letters": [
+        "A",
+        "C",
+        "O",
+        "R",
+        "A",
+        "O"
+      ],
+      "words": [
+        {
+          "display": "ORAÇÃO"
+        },
+        {
+          "display": "ORCA"
+        },
+        {
+          "display": "AÇO"
+        },
+        {
+          "display": "ARO"
+        },
+        {
+          "display": "CARA"
+        },
+        {
+          "display": "COROA"
+        }
+      ]
+    }
+  ]
+}

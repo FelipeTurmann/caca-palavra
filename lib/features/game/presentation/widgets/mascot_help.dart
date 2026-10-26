@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../../../core/theme/game_theme.dart';
 import '../../../../core/theme/visual_theme_catalog.dart';
@@ -6,7 +8,7 @@ import '../../domain/game_engine.dart';
 import '../game_controller.dart';
 
 const mascotInvitation =
-    'Vou te ajudar! Escolha uma palavra para receber uma dica.';
+    'Quer uma dica? Escolha uma palavra para eu te ajudar.';
 
 /// Speech overlays the round without changing its layout or touch coordinates.
 class MascotRoundLayout extends StatelessWidget {
@@ -17,221 +19,251 @@ class MascotRoundLayout extends StatelessWidget {
   });
   final GameController controller;
   final Widget child;
+
   @override
-  Widget build(BuildContext context) => controller.coordinator == null
-      ? child
-      : Stack(
+  Widget build(BuildContext context) {
+    if (controller.coordinator == null) return child;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final landscape = box.maxWidth > box.maxHeight;
+        final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+        final compact = box.maxHeight < 740 || landscape || largeText;
+        final width = landscape
+            ? math.min(box.maxWidth * .45, 520.0)
+            : math.min(box.maxWidth - 16, 560.0);
+        final height = math.min(
+          box.maxHeight,
+          landscape ? (largeText ? 178.0 : 160.0) : 260.0,
+        );
+        return Stack(
           fit: StackFit.expand,
           children: [
             child,
+            if (!controller.mascotOpen)
+              Positioned(
+                right: 4,
+                bottom: 2,
+                child: IgnorePointer(
+                  child: ExcludeSemantics(
+                    child: SizedBox(
+                      key: const ValueKey('mascot-decoration'),
+                      width: compact ? 48 : 80,
+                      height: compact ? 56 : 88,
+                      child: const ThemeMascot(height: 88, width: 80),
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
-              right: 0,
-              bottom: 0,
-              left: controller.mascotOpen ? 0 : null,
-              width: controller.mascotOpen
-                  ? null
-                  : MediaQuery.sizeOf(context).height < 740 ||
-                        MediaQuery.orientationOf(context) ==
-                            Orientation.landscape ||
-                        MediaQuery.textScalerOf(context).scale(1) > 1.3
-                  ? 64
-                  : 96,
-              child: TapRegion(
-                groupId: controller,
-                enabled: controller.mascotOpen,
-                onTapOutside: (_) {
-                  if (!controller.busy) controller.closeMascot();
-                },
-                child: MascotHelp(controller: controller),
+              key: const ValueKey('mascot-overlay-layer'),
+              right: 8,
+              bottom: 8,
+              width: width,
+              child: AnimatedSwitcher(
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 320),
+                reverseDuration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 180),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, .18),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: ScaleTransition(
+                      scale: Tween<double>(
+                        begin: .9,
+                        end: 1,
+                      ).animate(animation),
+                      alignment: Alignment.bottomRight,
+                      child: child,
+                    ),
+                  ),
+                ),
+                child: controller.mascotOpen
+                    ? TapRegion(
+                        key: const ValueKey('mascot-presentation'),
+                        groupId: controller,
+                        onTapOutside: (_) {
+                          if (!controller.busy) controller.closeMascot();
+                        },
+                        child: SizedBox(
+                          height: height,
+                          child: MascotHelp(controller: controller),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
               ),
             ),
           ],
         );
+      },
+    );
+  }
 }
 
+/// The character is decoration; all help actions live in the speech or toolbar.
 class MascotHelp extends StatelessWidget {
   const MascotHelp({super.key, required this.controller});
   final GameController controller;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final characterSize = math.min(
+        180.0,
+        math.min(box.maxWidth * .38, box.maxHeight - 12),
+      );
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12, bottom: 6),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _MascotSpeech(controller: controller),
+                  Positioned(
+                    right: -10,
+                    bottom: characterSize * .55,
+                    child: const CustomPaint(
+                      size: Size(11, 18),
+                      painter: _SpeechTail(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IgnorePointer(
+            child: ExcludeSemantics(
+              child: SizedBox(
+                key: const ValueKey('mascot-character'),
+                width: characterSize,
+                height: characterSize,
+                child: ThemeMascot(height: characterSize, width: characterSize),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _MascotSpeech extends StatelessWidget {
+  const _MascotSpeech({required this.controller});
+  final GameController controller;
+
   @override
   Widget build(BuildContext context) {
-    final scale = MediaQuery.textScalerOf(context).scale(1);
-    final compact =
-        MediaQuery.sizeOf(context).height < 740 ||
-        MediaQuery.orientationOf(context) == Orientation.landscape ||
-        scale > 1.3;
     final text = controller.busy
         ? 'Liberando dica…'
         : controller.mascotNotice ??
               controller.mascotHint?.clue ??
               mascotInvitation;
-    return SizedBox(
-      height: controller.mascotOpen
-          ? scale > 1.3
-                ? 178
-                : MediaQuery.sizeOf(context).width < 400
-                ? 164
-                : 112
-          : compact
-          ? 80
-          : 112,
-      child: Align(
-        alignment: Alignment.bottomRight,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 4, 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: GameTheme.cream,
+        border: Border.all(color: const Color(0xFFD6AA7B)),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x250B5660),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final iconActions =
+                box.maxWidth < 190 ||
+                box.maxHeight < 210 &&
+                    MediaQuery.textScalerOf(context).scale(1) > 1.3;
+            final canChoose =
+                !controller.mascotChoosing && controller.mascotHint != null;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: controller.mascotOpen
-                      ? Padding(
-                          padding: const EdgeInsets.only(right: 12, bottom: 6),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: GameTheme.cream,
-                                  border: Border.all(
-                                    color: const Color(0xFFD6AA7B),
-                                  ),
-                                  borderRadius: BorderRadius.circular(18),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x180B5660),
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    12,
-                                    6,
-                                    8,
-                                    3,
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Expanded(
-                                        child: SingleChildScrollView(
-                                          child: Semantics(
-                                            liveRegion: true,
-                                            child: Text(
-                                              text,
-                                              key: const ValueKey(
-                                                'mascot-speech',
-                                              ),
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: GameTheme.ink,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Wrap(
-                                        alignment: WrapAlignment.end,
-                                        spacing: 4,
-                                        children: [
-                                          if (controller.saveError != null)
-                                            TextButton(
-                                              onPressed: controller.busy
-                                                  ? null
-                                                  : controller.retrySave,
-                                              child: const Text(
-                                                'Tentar novamente',
-                                              ),
-                                            ),
-                                          if (!controller.mascotChoosing &&
-                                              controller.mascotHint != null)
-                                            TextButton(
-                                              onPressed: controller.interactive
-                                                  ? controller.chooseMascotWord
-                                                  : null,
-                                              child: const Text(
-                                                'Escolher outra palavra',
-                                              ),
-                                            ),
-                                          TextButton(
-                                            onPressed: controller.busy
-                                                ? null
-                                                : controller.closeMascot,
-                                            child: const Text('Fechar'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const Positioned(
-                                right: -10,
-                                bottom: 23,
-                                child: CustomPaint(
-                                  size: Size(11, 18),
-                                  painter: _SpeechTail(),
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                Semantics(
-                  button: true,
-                  label: 'Dica do mascote',
-                  excludeSemantics: true,
-                  enabled: controller.interactive && !controller.dragging,
-                  onTap: controller.interactive && !controller.dragging
-                      ? () => controller.mascotOpen
-                            ? controller.closeMascot()
-                            : controller.chooseMascotWord()
-                      : null,
-                  child: Tooltip(
-                    message: 'Dica do mascote',
-                    child: InkResponse(
-                      key: const ValueKey('mascot-help'),
-                      onTap: controller.interactive && !controller.dragging
-                          ? () => controller.mascotOpen
-                                ? controller.closeMascot()
-                                : controller.chooseMascotWord()
-                          : null,
-                      radius: 42,
-                      child: SizedBox(
-                        width: compact ? 48 : 80,
-                        height: compact ? 56 : 88,
-                        child: Stack(
-                          children: [
-                            const Positioned.fill(
-                              child: ThemeMascot(height: 80, width: 80),
-                            ),
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: GameTheme.cream,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                  size: 18,
-                                  color: GameTheme.teal,
-                                ),
-                              ),
-                            ),
-                          ],
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SingleChildScrollView(
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        text,
+                        key: const ValueKey('mascot-speech'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: GameTheme.ink,
                         ),
                       ),
                     ),
                   ),
                 ),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 4,
+                  children: [
+                    if (controller.saveError != null)
+                      iconActions
+                          ? IconButton(
+                              tooltip: 'Tentar novamente',
+                              onPressed: controller.busy
+                                  ? null
+                                  : controller.retrySave,
+                              icon: const Icon(Icons.refresh_rounded),
+                            )
+                          : TextButton(
+                              onPressed: controller.busy
+                                  ? null
+                                  : controller.retrySave,
+                              child: const Text('Tentar novamente'),
+                            ),
+                    if (canChoose)
+                      iconActions
+                          ? IconButton(
+                              tooltip: 'Escolher outra palavra',
+                              onPressed: controller.interactive
+                                  ? controller.chooseMascotWord
+                                  : null,
+                              icon: const Icon(Icons.touch_app_outlined),
+                            )
+                          : TextButton(
+                              onPressed: controller.interactive
+                                  ? controller.chooseMascotWord
+                                  : null,
+                              child: const Text('Escolher outra palavra'),
+                            ),
+                    iconActions
+                        ? IconButton(
+                            tooltip: 'Fechar',
+                            onPressed: controller.busy
+                                ? null
+                                : controller.closeMascot,
+                            icon: const Icon(Icons.close_rounded),
+                          )
+                        : TextButton(
+                            onPressed: controller.busy
+                                ? null
+                                : controller.closeMascot,
+                            child: const Text('Fechar'),
+                          ),
+                  ],
+                ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -361,15 +393,15 @@ class _WordChoicePulseState extends State<_WordChoicePulse>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 850),
+    duration: const Duration(milliseconds: 650),
   );
   late final Animation<double> _scale = Tween<double>(
     begin: 1,
-    end: 1.035,
+    end: 1.10,
   ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
   late final Animation<double> _opacity = Tween<double>(
     begin: 1,
-    end: .65,
+    end: .50,
   ).animate(_pulse);
 
   void _sync() {

@@ -6,6 +6,7 @@ import 'package:caca_palavra/features/game/data/daily_catalog.dart';
 import 'package:caca_palavra/features/game/presentation/game_controller.dart';
 import 'package:caca_palavra/features/game/presentation/game_screen.dart';
 import 'package:caca_palavra/features/game/presentation/widgets/word_slots.dart';
+import 'package:caca_palavra/features/game/presentation/widgets/mascot_help.dart';
 import 'campaign_widget_test.dart' show MemoryProgressRepository;
 import 'helpers.dart';
 
@@ -45,7 +46,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.byType(WordSlots), findsNWidgets(4));
+      expect(
+        find.byType(WordSlots),
+        findsNWidgets(controller.state.level.words.length),
+      );
       final answers = tester.getRect(find.byType(ListView));
       for (final word in controller.state.level.words) {
         for (var i = 0; i < word.letters.length; i++) {
@@ -65,13 +69,13 @@ void main() {
         }
       }
       final wheel = tester.getRect(find.byKey(const ValueKey('letter-wheel')));
-      for (final key in ['hint', 'super-hint']) {
+      for (final key in ['hint', 'mascot-help', 'super-hint']) {
         final button = find.byKey(ValueKey(key));
         final rect = tester.getRect(button);
         expect(rect.width, greaterThanOrEqualTo(48 - 0.001));
         expect(rect.height, greaterThanOrEqualTo(48 - 0.001));
         expect(rect.right, closeTo(size.width - 16, 0.1));
-        expect(rect.bottom, lessThan(wheel.top + 48));
+        expect(rect.bottom, lessThan(wheel.center.dy));
         for (final tile in controller.state.level.tiles) {
           expect(
             rect.overlaps(tester.getRect(find.byKey(ValueKey(tile.id)))),
@@ -79,6 +83,13 @@ void main() {
           );
         }
         await tester.tap(button);
+        if (key == 'mascot-help') {
+          await tester.pump(const Duration(milliseconds: 500));
+          expect(find.text(mascotInvitation), findsOneWidget);
+          controller.closeMascot();
+          await tester.pumpAndSettle();
+          continue;
+        }
         await tester.pumpAndSettle();
         expect(find.byType(AlertDialog), findsOneWidget);
         expect(

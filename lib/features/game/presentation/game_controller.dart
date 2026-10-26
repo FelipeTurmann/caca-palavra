@@ -2,6 +2,7 @@ import 'dart:async';
 import '../../../core/monetization/ad_free_plan.dart';
 import 'dart:ui';
 import '../../../core/preferences/player_preferences.dart';
+import '../../../core/theme/visual_theme_catalog.dart';
 import '../../../core/feedback/game_feedback.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/game_engine.dart';
@@ -9,6 +10,7 @@ import '../domain/round_snapshot.dart';
 import '../application/game_session_coordinator.dart';
 import '../application/daily_models.dart';
 import '../application/campaign_models.dart';
+import '../application/shop_models.dart';
 import 'wheel_gesture.dart';
 
 abstract final class GameTiming {
@@ -214,6 +216,22 @@ class GameController extends ChangeNotifier {
   String? saveError;
   LetterReveal? paidReveal;
   int get balance => coordinator?.profile.balance ?? 0;
+  bool isThemeUnlocked(VisualTheme theme) =>
+      coordinator?.isThemeUnlocked(theme.id) ?? theme == VisualTheme.garden;
+
+  Future<void> useTheme(VisualTheme theme) async {
+    if (busy || !isThemeUnlocked(theme)) return;
+    await preferences.selectTheme(theme);
+  }
+
+  Future<Map<String, dynamic>?> unlockTheme(VisualTheme theme) async {
+    final result = await run(() => coordinator!.purchaseTheme(theme.id));
+    if (result != null && isThemeUnlocked(theme)) {
+      await preferences.selectTheme(theme);
+    }
+    return result;
+  }
+
   bool get explorerRewardGranted =>
       !isDaily &&
       (coordinator?.profile.explorerRewardedLevels.contains(state.level.id) ??
@@ -293,6 +311,8 @@ class GameController extends ChangeNotifier {
     }
     creditMessage = result['source'] == 'simulated_purchase'
         ? 'Compra simulada: +${result['amount']} moedas. Nenhuma cobrança realizada.'
+        : result['source'] == 'admob_test'
+        ? '+${result['amount']} moedas recebidas pelo anúncio de teste.'
         : '+${result['amount']} moedas adicionadas pela simulação.';
   }
 
@@ -312,6 +332,9 @@ class GameController extends ChangeNotifier {
         _collectCoinRewards(previousProfile, coordinator!.profile);
       }
       return result;
+    } on RewardAdException catch (error) {
+      creditMessage = error.message;
+      return null;
     } on DailyExpired {
       clearCoinRewards(notify: false);
       cancelGesture(notify: false);
@@ -350,6 +373,10 @@ class GameController extends ChangeNotifier {
         feedbackSerial++;
       }
       if (result?['kind'] == 'shop') _showCredit(result!);
+      if (result?['kind'] == 'theme_unlock') {
+        final theme = VisualTheme.resolve(result!['themeId'] as String);
+        if (isThemeUnlocked(theme)) await preferences.selectTheme(theme);
+      }
       if (result?['kind'] == 'mascot_hint' && effects.active && !dailyInvalid) {
         showMascotWord(result!['hint']['targetKey'] as String);
       }

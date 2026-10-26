@@ -1,9 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/services.dart';
-
+import 'package:flutter/foundation.dart';
 import '../domain/game_engine.dart';
-import '../domain/word_normalizer.dart';
+import 'catalog_data.dart';
 
 class GameData {
   GameData(
@@ -22,132 +20,23 @@ class GameData {
       assets.loadString('assets/data/levels.json'),
       assets.loadString('assets/data/lexicon_pt_br.json'),
     ]);
-    return parse(json[0], json[1]);
+    // Keep full-catalog parsing and validation away from Android's UI isolate.
+    return compute(_parseBundle, json);
   }
+
+  static GameData _parseBundle(List<String> json) => parse(json[0], json[1]);
 
   static GameData parse(String levelsJson, String lexiconJson) {
-    try {
-      final lexiconRoot = jsonDecode(lexiconJson) as Map<String, dynamic>;
-      final levelRoot = jsonDecode(levelsJson) as Map<String, dynamic>;
-      if (levelRoot['schemaVersion'] != 1 ||
-          lexiconRoot['schemaVersion'] != 1) {
-        throw const FormatException('Versão dos dados não suportada.');
-      }
-      final lexicon = <String, WordEntry>{};
-      for (final raw in lexiconRoot['words'] as List) {
-        final word = _word(
-          raw,
-          clueVersion: lexiconRoot['clueVersion'] as int? ?? 1,
-        );
-        if (lexiconRoot['clueVersion'] != null) {
-          final clue = word.clue;
-          if (clue == null ||
-              clue.trim().isEmpty ||
-              clue.length > 120 ||
-              word.clueVersion < 1) {
-            throw FormatException('Dica ausente ou inválida: ${word.display}.');
-          }
-          final normalized = WordNormalizer.normalizeClue(clue);
-          if (RegExp('(^|[^A-Z])${word.key}([^A-Z]|\$)').hasMatch(normalized)) {
-            throw FormatException(
-              'A dica contém sua resposta: ${word.display}.',
-            );
-          }
-        }
-        lexicon.putIfAbsent(word.key, () => word);
-      }
-      final levels = <LevelDefinition>[];
-      for (final raw in levelRoot['levels'] as List) {
-        final level = LevelDefinition(
-          id: raw['id'] as int,
-          difficulty: raw['difficulty'] as String,
-          letters: List<String>.from(raw['letters'] as List),
-          words: (raw['words'] as List).map(_word).toList(),
-          extraGoal: raw['extraGoal'] as int? ?? 1,
-        );
-        validateLevel(level, lexicon);
-        if (levels.isNotEmpty && level.id <= levels.last.id) {
-          throw const FormatException(
-            'IDs devem ser únicos e estar em ordem crescente.',
-          );
-        }
-        levels.add(level);
-      }
-      if (levels.isEmpty) {
-        throw const FormatException('O catálogo não pode estar vazio.');
-      }
-      return GameData(
-        levels,
-        lexicon,
-        catalogVersion: levelRoot['catalogVersion'] as int? ?? 1,
-      );
-    } on FormatException {
-      rethrow;
-    } catch (_) {
-      throw const FormatException(
-        'Estrutura inválida nos arquivos de níveis ou léxico.',
-      );
-    }
-  }
-
-  static WordEntry _word(dynamic raw, {int clueVersion = 1}) {
-    final display = raw['display'] as String;
-    if (display != display.trim() || display != display.toUpperCase()) {
-      throw FormatException('Use grafia em maiúsculas e sem espaços: $display');
-    }
-    final word = WordEntry(
-      display,
-      clue: raw['clue'] as String?,
-      clueVersion: raw['clueVersion'] as int? ?? clueVersion,
+    final data = CatalogData.parse(levelsJson, lexiconJson);
+    return GameData(
+      data.levels,
+      data.lexicon,
+      catalogVersion: data.catalogVersion,
     );
-    if (word.key.length < 3) {
-      throw FormatException('Palavra com menos de três letras: $display');
-    }
-    return word;
   }
 
   static void validateLevel(
     LevelDefinition level,
     Map<String, WordEntry> lexicon,
-  ) {
-    void invalid(String message) =>
-        throw FormatException('Nível ${level.id}: $message');
-    if (level.id < 1 || level.difficulty.trim().isEmpty) {
-      invalid('metadados inválidos.');
-    }
-    if (level.letters.length < 4 ||
-        level.letters.length > 6 ||
-        level.letters.any((letter) => !RegExp(r'^[A-Z]$').hasMatch(letter))) {
-      invalid('use de quatro a seis fichas A–Z.');
-    }
-    if (level.words.length < 3 || level.words.length > 6) {
-      invalid('use de três a seis respostas.');
-    }
-    final seen = <String>{};
-    for (final word in level.words) {
-      if (!seen.add(word.key)) {
-        invalid('respostas ambíguas ou duplicadas: ${word.display}.');
-      }
-      if (word.key.length < 3) {
-        invalid('resposta curta: ${word.display}.');
-      }
-      if (!lexicon.containsKey(word.key)) {
-        invalid('alvo ausente no léxico: ${word.display}.');
-      }
-      final remaining = level.letters.toList();
-      for (final letter in word.key.split('')) {
-        if (!remaining.remove(letter)) {
-          invalid('fichas insuficientes para ${word.display}.');
-        }
-      }
-    }
-    final availableExtras = lexicon.keys
-        .where((key) => !seen.contains(key) && level.canForm(key))
-        .length;
-    if (level.extraGoal < 1 || level.extraGoal > availableExtras) {
-      invalid(
-        'meta de extras ${level.extraGoal} inválida: há $availableExtras extras possíveis no léxico.',
-      );
-    }
-  }
+  ) => CatalogData.validateLevel(level, lexicon);
 }

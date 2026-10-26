@@ -41,9 +41,11 @@ void main() {
         );
         expect(level.extraGoal, lessThanOrEqualTo(extras.length));
       }
-      final levelsJson = File('assets/data/levels.json').readAsStringSync();
+      final levelsJson = File(
+        'test/fixtures/levels_v1.json',
+      ).readAsStringSync();
       final lexiconJson = File(
-        'assets/data/lexicon_pt_br.json',
+        'test/fixtures/lexicon_v1.json',
       ).readAsStringSync();
       for (final invalidGoal in [0, -1, 2, 100]) {
         final root = jsonDecode(levelsJson) as Map<String, dynamic>;
@@ -237,22 +239,27 @@ void main() {
     );
   });
 
-  test('lexicon groups variants with first canonical spelling', () {
-    final levels = File('assets/data/levels.json').readAsStringSync();
-    final lexicon =
-        jsonDecode(File('assets/data/lexicon_pt_br.json').readAsStringSync())
-            as Map<String, dynamic>;
-    (lexicon['words'] as List).addAll([
-      {'display': 'AVÓ', 'clue': 'Mãe de um dos seus pais.'},
-      {'display': 'AVÔ', 'clue': 'Pai de um dos seus pais.'},
-    ]);
-    final data = GameData.parse(levels, jsonEncode(lexicon));
-    expect(data.lexicon['AVO']!.display, 'AVÓ');
-  });
+  test(
+    'lexicon rejects spelling collisions instead of discarding a variant',
+    () {
+      final levels = File('test/fixtures/levels_v1.json').readAsStringSync();
+      final lexicon =
+          jsonDecode(File('test/fixtures/lexicon_v1.json').readAsStringSync())
+              as Map<String, dynamic>;
+      (lexicon['words'] as List).addAll([
+        {'display': 'AVÓ', 'clue': 'Mãe de um dos seus pais.'},
+        {'display': 'AVÔ', 'clue': 'Pai de um dos seus pais.'},
+      ]);
+      expect(
+        () => GameData.parse(levels, jsonEncode(lexicon)),
+        throwsFormatException,
+      );
+    },
+  );
 
   test('invalid data never opens impossible levels', () {
-    final lexicon = File('assets/data/lexicon_pt_br.json').readAsStringSync();
-    final original = File('assets/data/levels.json').readAsStringSync();
+    final lexicon = File('test/fixtures/lexicon_v1.json').readAsStringSync();
+    final original = File('test/fixtures/levels_v1.json').readAsStringSync();
     for (final mutation in <void Function(Map<String, dynamic>)>[
       (root) => root['levels'][1]['id'] = 1,
       (root) => root['levels'][0]['letters'] = ['G', 'A', 'T', 'A'],

@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import '../application/campaign_models.dart';
 import '../application/daily_models.dart';
 import '../application/shop_models.dart';
+import '../application/theme_unlocks.dart';
 import '../domain/game_engine.dart';
 import '../domain/round_snapshot.dart';
 import 'game_data.dart';
@@ -394,6 +395,7 @@ class SqliteProgressRepository implements ProgressRepository {
         );
       }
     }
+    final themeLedger = <String>{};
     var sum = 0, welcome = 0;
     for (final row in ledger) {
       final amount = row['amount'] as int, id = row['operation_id'] as String;
@@ -504,6 +506,23 @@ class SqliteProgressRepository implements ProgressRepository {
               !mascotLedger.add(parent!)) {
             invalid('dica do mascote sem débito ou liberação correspondente');
           }
+        case 'theme_unlock':
+          final themeId = request['themeId'] as String?;
+          if (themeId == null ||
+              id != 'theme-unlock:$themeId' ||
+              id != parent ||
+              amount != -ThemeUnlocks.confirmedPrice(request) ||
+              !profile.purchasedThemes.contains(themeId) ||
+              result['kind'] != 'theme_unlock' ||
+              result['status'] != 'purchased' ||
+              result['themeId'] != themeId ||
+              request.containsKey('mode') ||
+              request.containsKey('date') ||
+              row['level_id'] != null ||
+              row['round_id'] != null ||
+              !themeLedger.add(themeId)) {
+            invalid('tema sem débito ou desbloqueio correspondente');
+          }
         case 'simulated_purchase':
           if (request['simulated'] != true ||
               result['simulated'] != true ||
@@ -521,6 +540,19 @@ class SqliteProgressRepository implements ProgressRepository {
               result['amount'] != amount) {
             invalid('anúncio simulado inconsistente');
           }
+        case 'admob_test':
+          if (request['kind'] != 'admob_test' ||
+              request['simulated'] != false ||
+              request['testAd'] != true ||
+              result['simulated'] != false ||
+              result['testAd'] != true ||
+              result['source'] != 'admob_test' ||
+              result['orderId'] != parent ||
+              id != parent ||
+              amount != Economy.adReward ||
+              result['amount'] != amount) {
+            invalid('recompensa de anúncio de teste inconsistente');
+          }
         default:
           invalid('tipo de transação desconhecido');
       }
@@ -532,7 +564,8 @@ class SqliteProgressRepository implements ProgressRepository {
         dailyRewards.length != dailyCompleted.length ||
         paidLedger.length != paid.length ||
         superLedger.length != supers.length ||
-        mascotLedger.length != mascot.length) {
+        mascotLedger.length != mascot.length ||
+        themeLedger.length != profile.purchasedThemes.length) {
       invalid('carteira divergente do histórico');
     }
   }
@@ -607,7 +640,9 @@ class SqliteProgressRepository implements ProgressRepository {
           proposal.request['date'] != calendarDate(now())) {
         throw DailyExpired();
       }
-      final price = Economy.confirmedPrice(proposal.request);
+      final price = proposal.request['kind'] == 'theme_unlock'
+          ? ThemeUnlocks.confirmedPrice(proposal.request)
+          : Economy.confirmedPrice(proposal.request);
       if (current.balance < price) {
         throw const FormatException('Saldo anterior insuficiente.');
       }

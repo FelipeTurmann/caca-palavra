@@ -1,24 +1,26 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "baseDate": "2026-01-01",
   "levels": [
     {
       "id": 1,
       "extraGoal": 1,
       "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 6,
       "letters": [
-        "G",
-        "A",
         "T",
+        "A",
+        "G",
         "O"
       ],
       "words": [
         {
-          "display": "GATO"
+          "display": "GOTA"
         },
         {
-          "display": "GOTA"
+          "display": "GATO"
         },
         {
           "display": "ATO"
@@ -29,143 +31,158 @@
       "id": 2,
       "extraGoal": 2,
       "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 16,
       "letters": [
-        "P",
+        "O",
+        "N",
         "A",
-        "T",
-        "O"
+        "C"
       ],
       "words": [
         {
-          "display": "PATO"
+          "display": "ONÇA"
         },
         {
-          "display": "TOPA"
+          "display": "CANO"
         },
         {
-          "display": "ATO"
+          "display": "OCA"
+        },
+        {
+          "display": "AÇO"
         }
       ]
     },
     {
       "id": 3,
-      "extraGoal": 2,
+      "extraGoal": 1,
       "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 14,
       "letters": [
-        "B",
-        "O",
         "L",
-        "A"
+        "O",
+        "A",
+        "B"
       ],
       "words": [
         {
-          "display": "BOLA"
+          "display": "LOBA"
+        },
+        {
+          "display": "OLÁ"
         },
         {
           "display": "BOA"
         },
         {
-          "display": "OLÁ"
+          "display": "BOLA"
         }
       ]
     },
     {
       "id": 4,
-      "extraGoal": 2,
-      "difficulty": "facil",
+      "extraGoal": 1,
+      "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 14,
       "letters": [
+        "R",
+        "O",
         "A",
-        "C",
-        "A",
-        "O"
+        "D"
       ],
       "words": [
         {
-          "display": "AÇÃO"
+          "display": "DOAR"
         },
         {
-          "display": "AÇO"
+          "display": "ARO"
         },
         {
-          "display": "OCA"
+          "display": "RODA"
+        },
+        {
+          "display": "DOR"
         }
       ]
     },
     {
       "id": 5,
-      "extraGoal": 3,
-      "difficulty": "facil",
+      "extraGoal": 1,
+      "difficulty": "introducao",
+      "rest": true,
+      "difficultyScore": 0,
       "letters": [
-        "P",
-        "A",
-        "T",
-        "R",
-        "O"
+        "O",
+        "M",
+        "B",
+        "A"
       ],
       "words": [
         {
-          "display": "PRATO"
+          "display": "MÃO"
         },
         {
-          "display": "PORTA"
+          "display": "OBA"
         },
         {
-          "display": "ROTA"
-        },
-        {
-          "display": "RATO"
+          "display": "BOM"
         }
       ]
     },
     {
       "id": 6,
-      "extraGoal": 3,
-      "difficulty": "facil",
+      "extraGoal": 1,
+      "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 14,
       "letters": [
-        "C",
+        "I",
+        "M",
         "A",
-        "R",
-        "O",
-        "S"
+        "R"
       ],
       "words": [
         {
-          "display": "CAROS"
+          "display": "MIAR"
         },
         {
-          "display": "ARCOS"
+          "display": "ÍMÃ"
         },
         {
-          "display": "RASO"
+          "display": "MAR"
         },
         {
-          "display": "CASO"
+          "display": "RIMA"
         }
       ]
     },
     {
       "id": 7,
-      "extraGoal": 3,
-      "difficulty": "intermediario",
+      "extraGoal": 2,
+      "difficulty": "introducao",
+      "rest": false,
+      "difficultyScore": 14,
       "letters": [
-        "C",
         "A",
-        "N",
-        "T",
-        "O"
+        "C",
+        "O",
+        "T"
       ],
       "words": [
         {
-          "display": "CANTO"
+          "display": "TACO"
         },
         {
-          "display": "CONTA"
+          "display": "ATO"
         },
         {
           "display": "CÃO"
         },
         {
-          "display": "ANO"
+          "display": "TOCA"
         }
       ]
     }

@@ -3,6 +3,7 @@ import '../../../core/preferences/player_preferences.dart';
 import '../../../core/theme/game_theme.dart';
 import '../../../core/theme/visual_theme_catalog.dart';
 import '../../../core/widgets/garden.dart';
+import '../application/theme_unlocks.dart';
 import 'game_controller.dart';
 
 Future<void> openThemes(BuildContext context, GameController controller) async {
@@ -42,7 +43,7 @@ class ThemesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: controller.preferences,
+    listenable: Listenable.merge([controller, controller.preferences]),
     builder: (context, _) => Scaffold(
       appBar: AppBar(
         title: const Text('Temas'),
@@ -54,9 +55,24 @@ class ThemesScreen extends StatelessWidget {
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        child: ThemeSaveFeedback(
-          preferences: controller.preferences,
-          showSuccess: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ThemeSaveFeedback(
+              preferences: controller.preferences,
+              showSuccess: true,
+            ),
+            if (controller.saveError != null) ...[
+              Semantics(
+                liveRegion: true,
+                child: Text(controller.saveError!, textAlign: TextAlign.center),
+              ),
+              TextButton(
+                onPressed: controller.busy ? null : controller.retrySave,
+                child: const Text('Tentar novamente'),
+              ),
+            ],
+          ],
         ),
       ),
       body: Garden(
@@ -75,6 +91,15 @@ class ThemesScreen extends StatelessWidget {
                       style: TextStyle(fontSize: 16),
                     ),
                     const SizedBox(height: 20),
+                    Text(
+                      'Seu saldo: ${controller.balance} moedas',
+                      key: const ValueKey('themes-balance'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final columns =
@@ -82,10 +107,7 @@ class ThemesScreen extends StatelessWidget {
                             MediaQuery.textScalerOf(context).scale(16) <= 24;
                         final cards = [
                           for (final theme in VisualTheme.values)
-                            _ThemeOption(
-                              theme: theme,
-                              preferences: controller.preferences,
-                            ),
+                            _ThemeOption(theme: theme, controller: controller),
                         ];
                         return Wrap(
                           spacing: 16,
@@ -114,21 +136,110 @@ class ThemesScreen extends StatelessWidget {
 }
 
 class _ThemeOption extends StatelessWidget {
-  const _ThemeOption({required this.theme, required this.preferences});
+  const _ThemeOption({required this.theme, required this.controller});
   final VisualTheme theme;
-  final PreferencesController preferences;
+  final GameController controller;
+
+  Future<void> unlock(BuildContext context) async {
+    final price = ThemeUnlocks.rule(theme.id).price!;
+    final enough = controller.balance >= price;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        scrollable: true,
+        title: Text(enough ? 'Desbloquear tema' : 'Moedas insuficientes'),
+        content: Text(
+          enough
+              ? 'Desbloquear ${theme.title} por $price moedas? A compra é única e o tema ficará disponível permanentemente. Você tem ${controller.balance} moedas.'
+              : 'Você tem ${controller.balance} moedas. Faltam ${price - controller.balance} moedas para desbloquear ${theme.title}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: Text(enough ? 'Cancelar' : 'Entendi'),
+          ),
+          if (enough)
+            FilledButton(
+              key: ValueKey('confirm-unlock-${theme.id}'),
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text('Desbloquear · $price moedas'),
+            ),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+    final result = await controller.unlockTheme(theme);
+    if (!context.mounted) return;
+    if (result?['status'] == 'insufficient') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Moedas insuficientes. O tema continua bloqueado.'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selected = preferences.value.visualTheme == theme;
+    final unlocked = controller.isThemeUnlocked(theme);
+    final selected =
+        unlocked && controller.preferences.value.visualTheme == theme;
+    final rule = ThemeUnlocks.rule(theme.id);
+    final enabled =
+        !controller.busy && controller.coordinator?.hasFailedCommand != true;
     return GardenCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ThemePreview(theme: theme),
+          Stack(
+            children: [
+              ThemePreview(theme: theme),
+              if (!unlocked)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Semantics(
+                    label: '${theme.title}, bloqueado',
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: GameTheme.cream,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.lock_rounded,
+                        key: ValueKey('theme-lock-${theme.id}'),
+                        color: GameTheme.teal,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(theme.title, style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          if (selected)
+          if (!unlocked && rule.level != null)
+            OutlinedButton.icon(
+              key: ValueKey('unlock-theme-${theme.id}'),
+              onPressed: null,
+              icon: const Icon(Icons.lock_rounded),
+              label: Text(
+                'Libera no nível ${rule.level}',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else if (!unlocked)
+            FilledButton.icon(
+              key: ValueKey('unlock-theme-${theme.id}'),
+              onPressed: enabled ? () => unlock(context) : null,
+              icon: const Icon(Icons.lock_open_rounded),
+              label: Text(
+                'Desbloquear · ${rule.price} moedas',
+                textAlign: TextAlign.center,
+              ),
+            )
+          else if (selected)
             Semantics(
               selected: true,
               label: '${theme.title}. Em uso',
@@ -153,11 +264,11 @@ class _ThemeOption extends StatelessWidget {
             Semantics(
               label: 'Usar tema ${theme.title}',
               button: true,
-              onTap: () => preferences.selectTheme(theme),
+              onTap: enabled ? () => controller.useTheme(theme) : null,
               excludeSemantics: true,
               child: FilledButton(
                 key: ValueKey('use-theme-${theme.id}'),
-                onPressed: () => preferences.selectTheme(theme),
+                onPressed: enabled ? () => controller.useTheme(theme) : null,
                 child: const Text('Usar tema'),
               ),
             ),

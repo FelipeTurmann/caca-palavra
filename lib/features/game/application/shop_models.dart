@@ -25,16 +25,20 @@ class ProviderReceipt {
     this.source,
     this.amount, {
     this.packageId,
+    this.simulated = true,
+    this.testAd = false,
   });
   final String orderId, source;
   final int amount;
   final String? packageId;
+  final bool simulated, testAd;
   Map<String, Object?> toJson() => {
     'orderId': orderId,
     'source': source,
     'amount': amount,
     'packageId': packageId,
-    'simulated': true,
+    'simulated': simulated,
+    if (testAd) 'testAd': true,
   };
 }
 
@@ -43,7 +47,13 @@ abstract interface class PurchaseProvider {
 }
 
 abstract interface class RewardAdProvider {
+  String get source;
   Future<ProviderReceipt> reward(String orderId);
+}
+
+class RewardAdException implements Exception {
+  const RewardAdException(this.message);
+  final String message;
 }
 
 class SimulatedPurchaseProvider implements PurchaseProvider {
@@ -58,6 +68,8 @@ class SimulatedPurchaseProvider implements PurchaseProvider {
 }
 
 class SimulatedRewardAdProvider implements RewardAdProvider {
+  @override
+  String get source => 'simulated_ad';
   @override
   Future<ProviderReceipt> reward(String orderId) async =>
       ProviderReceipt(orderId, 'simulated_ad', Economy.adReward);

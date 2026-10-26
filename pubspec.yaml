@@ -1,7 +1,7 @@
 name: caca_palavra
 description: Motor local de conectar palavras em português brasileiro.
 publish_to: none
-version: 0.10.3+19
+version: 0.13.1+25
 environment:
   sdk: ^3.12.0
 dependencies:
@@ -9,6 +9,7 @@ dependencies:
     sdk: flutter
   sqflite: ^2.4.4+2
   path: ^1.9.1
+  google_mobile_ads: 9.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -23,6 +24,7 @@ flutter:
     - assets/data/daily_levels.json
     - assets/data/levels.json
     - assets/data/lexicon_pt_br.json
+    - assets/data/LICENSE-fserb.txt
     - assets/themes/jardim_gatinho/mascot-cartoon.png
     - assets/themes/jardim_gatinho/scenery-cartoon.png
     - assets/themes/jardim_gatinho/flowerbed-cartoon.png

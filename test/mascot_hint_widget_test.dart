@@ -49,9 +49,17 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    final session = await GameSessionCoordinator.create(
-      loadData(),
-      repository ?? MemoryProgressRepository(70),
+    final progress = repository ?? MemoryProgressRepository(70);
+    final session = await GameSessionCoordinator.create(loadData(), progress);
+    // Artwork fixtures represent a player with every visual already unlocked.
+    session.profile = progress.profile = session.profile.copyWith(
+      purchasedThemes: {
+        'capivara_lagoa',
+        'biblioteca_encantada',
+        'fundo_mar',
+        'jardim_abelhas',
+      },
+      unlocked: {...session.profile.unlocked, 100},
     );
     await tester.pumpWidget(
       WordGameApp(
@@ -158,13 +166,16 @@ void main() {
           theme: VisualTheme.snow,
         );
         final mascot = find.byKey(const ValueKey('mascot-help'));
+        await tester.ensureVisible(mascot);
+        await settle(tester);
         final wheel = find.byKey(const ValueKey('letter-wheel'));
         final wheelBefore = tester.getRect(wheel);
         final rowBefore = tester.getRect(
           find.byKey(const ValueKey('mascot-line-GATO')),
         );
         expect(tester.getSize(mascot).width, greaterThanOrEqualTo(48));
-        await tap(tester, mascot);
+        await tester.tap(mascot);
+        await settle(tester);
         expect(tester.getRect(wheel), wheelBefore);
         expect(
           tester.getRect(find.byKey(const ValueKey('mascot-line-GATO'))),
@@ -278,6 +289,51 @@ void main() {
     controller.closeMascot();
     await tester.pumpAndSettle();
     expect(tester.widget<ScaleTransition>(pulse).scale.value, 1);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('toolbar opens animated larger mascot; character is decoration', (
+    tester,
+  ) async {
+    final (_, controller) = await mount(tester);
+    final decoration = find.byKey(const ValueKey('mascot-decoration'));
+    final smallSize = tester.getSize(decoration);
+    await tester.tap(decoration, warnIfMissed: false);
+    await tester.pump();
+    expect(controller.mascotOpen, false);
+    final letterHint = tester.getCenter(find.byKey(const ValueKey('hint')));
+    final mascotHint = tester.getCenter(
+      find.byKey(const ValueKey('mascot-help')),
+    );
+    final superHint = tester.getCenter(
+      find.byKey(const ValueKey('super-hint')),
+    );
+    expect(mascotHint.dx, letterHint.dx);
+    expect(mascotHint.dy, greaterThan(letterHint.dy));
+    expect(mascotHint.dy, lessThan(superHint.dy));
+    await tester.tap(find.byKey(const ValueKey('mascot-help')));
+    await tester.pump();
+    final character = find.byKey(const ValueKey('mascot-character'));
+    expect(tester.getSize(character).width, greaterThan(smallSize.width));
+    final fade = find
+        .ancestor(
+          of: find.byType(MascotHelp),
+          matching: find.byType(FadeTransition),
+        )
+        .first;
+    expect(tester.widget<FadeTransition>(fade).opacity.value, lessThan(1));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.widget<FadeTransition>(fade).opacity.value, 1);
+    expect(
+      find.descendant(
+        of: find.byType(MascotHelp),
+        matching: find.byType(InkResponse),
+      ),
+      findsNothing,
+    );
+    controller.closeMascot();
+    await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
   });

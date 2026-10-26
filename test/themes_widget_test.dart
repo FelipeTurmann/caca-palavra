@@ -24,11 +24,29 @@ Future<void> tap(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
-  Future<GameSessionCoordinator> session() => GameSessionCoordinator.create(
-    loadData(),
-    MemoryProgressRepository(600),
-    now: () => DateTime(2026, 10, 22, 12),
-  );
+  Future<GameSessionCoordinator> session({bool allArtwork = false}) async {
+    final repo = MemoryProgressRepository(allArtwork ? 4000 : 600);
+    final c = await GameSessionCoordinator.create(
+      loadData(),
+      repo,
+      now: () => DateTime(2026, 10, 22, 12),
+    );
+    await c.purchaseTheme('capivara_lagoa');
+    if (allArtwork) {
+      for (final id in [
+        'biblioteca_encantada',
+        'fundo_mar',
+        'jardim_abelhas',
+      ]) {
+        await c.purchaseTheme(id);
+      }
+      // Artwork-only milestone fixture; real progression is tested separately.
+      c.profile = repo.profile = c.profile.copyWith(
+        unlocked: {...c.profile.unlocked, 100},
+      );
+    }
+    return c;
+  }
 
   testWidgets(
     'select, resume both modes, auxiliary routes and return without resetting the game',
@@ -184,7 +202,7 @@ void main() {
           addTearDown(tester.view.resetPhysicalSize);
           addTearDown(tester.view.resetDevicePixelRatio);
           addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-          final c = await session();
+          final c = await session(allArtwork: true);
           await tester.pumpWidget(
             WordGameApp(
               loader: () async => c,
@@ -250,7 +268,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.clockReversed, true);
     await tap(tester, find.byKey(const ValueKey('home-themes')));
-    await tap(tester, find.byKey(const ValueKey('use-theme-capivara_lagoa')));
+    await tap(
+      tester,
+      find.byKey(const ValueKey('unlock-theme-capivara_lagoa')),
+    );
+    expect(find.text('Moedas insuficientes'), findsOneWidget);
     expect(find.byType(ThemesScreen), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();

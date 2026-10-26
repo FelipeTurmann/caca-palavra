@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'core/monetization/ad_free_plan.dart';
+import 'core/monetization/admob_reward_ad_provider.dart';
 import 'core/preferences/player_preferences.dart';
 import 'core/feedback/game_feedback.dart';
 import 'core/theme/visual_theme_catalog.dart';
@@ -22,6 +23,7 @@ Future<GameSessionCoordinator> loadGame() async {
       data,
       repository,
       dailyCatalog: await DailyCatalog.load(),
+      adProvider: AdMobTestRewardAdProvider(),
     );
   } catch (_) {
     await repository.close();
@@ -72,6 +74,9 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
             ? SqlitePreferencesStore(repository.database)
             : MemoryPreferencesStore());
     final preferences = await PreferencesController.load(store);
+    if (!session.isThemeUnlocked(preferences.value.visualThemeId)) {
+      await preferences.selectTheme(VisualTheme.garden);
+    }
     final controller = GameController(
       session.engine,
       adFreePlan: await AdFreePlanController.load(

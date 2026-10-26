@@ -13,6 +13,7 @@ import 'package:caca_palavra/features/game/data/daily_catalog.dart';
 import 'package:caca_palavra/features/game/data/progress_repository.dart';
 import 'package:caca_palavra/features/game/presentation/game_screen.dart';
 import 'package:caca_palavra/features/game/presentation/home_screen.dart';
+import 'package:caca_palavra/features/game/domain/game_engine.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -25,14 +26,37 @@ void main() {
       );
       // Dedicated fixture only. Never delete the player's normal database.
       await deleteDatabase(location);
-      final data = await GameData.load();
+      final original = await GameData.load();
+      // Artwork-only catalog starts at 100 so both milestone themes are usable.
+      // Production keeps its current catalog and real 50/100 requirements.
+      final data = GameData([
+        for (final level in original.levels)
+          LevelDefinition(
+            id: level.id + 99,
+            difficulty: level.difficulty,
+            letters: level.letters,
+            words: level.words,
+            extraGoal: level.extraGoal,
+          ),
+      ], original.lexicon);
       final daily = await DailyCatalog.load();
-      var repo = await SqliteProgressRepository.open(databasePath: location);
+      var repo = await SqliteProgressRepository.open(
+        databasePath: location,
+        initialBalance: 4000,
+      );
       var session = await GameSessionCoordinator.create(
         data,
         repo,
         dailyCatalog: daily,
       );
+      for (final id in [
+        'capivara_lagoa',
+        'biblioteca_encantada',
+        'fundo_mar',
+        'jardim_abelhas',
+      ]) {
+        await session.purchaseTheme(id);
+      }
       Future<void> tap(Finder finder) async {
         await tester.ensureVisible(finder);
         await tester.pumpAndSettle();

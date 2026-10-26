@@ -824,6 +824,14 @@ class _HintTools extends StatelessWidget {
         false,
       ),
       button(
+        'mascot-help',
+        'Dica do mascote',
+        Economy.mascotHintPrice,
+        Icons.chat_bubble_outline_rounded,
+        controller.chooseMascotWord,
+        false,
+      ),
+      button(
         'super-hint',
         'Super Dica',
         Economy.superHintPrice,
@@ -838,9 +846,10 @@ class _HintTools extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              children.first,
-              const SizedBox(height: 4),
-              children.last,
+              for (var index = 0; index < children.length; index++) ...[
+                if (index > 0) const SizedBox(height: 4),
+                children[index],
+              ],
             ],
           );
   }
