@@ -1,4 +1,4 @@
-# Conecte palavras (0.15.0+32)
+# Conecte palavras (0.15.1+33)
 
 Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha e desafio diário. O fluxo normal agora integra `auth-service` e `caca-palavra-cartoon-api`: identidade, carteira, conclusões e temas vêm do servidor; a rodada parcial fica no SQLite. A loja está oculta nesta etapa. O perfil local antigo não é importado: uma nova conta começa no nível 1 com 60 moedas.
 

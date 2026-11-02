@@ -110,7 +110,7 @@ void main() {
           await tester.pumpAndSettle();
           expect(controller.state.phase, RoundPhase.completed);
           expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
-          expect(find.text('Muito bem!'), findsOneWidget);
+          expect(find.text(controller.completionMessage), findsOneWidget);
           expect(controller.freshVictory, true);
           expect(controller.balance, extra ? 80 : 20);
           await tester.tap(find.byKey(const ValueKey('next-level')));

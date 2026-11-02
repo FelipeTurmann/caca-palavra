@@ -1148,7 +1148,8 @@ class _Completion extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      'Muito bem!',
+                      controller.completionMessage,
+                      key: const ValueKey('completion-message'),
                       style: Theme.of(context).textTheme.headlineMedium,
                       textAlign: TextAlign.center,
                     ),

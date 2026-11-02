@@ -318,7 +318,7 @@ void main() {
           // Restore the saved result, which must be entirely static.
           await c.startDaily();
           await screen(GameScreen(controller: controller));
-          expect(find.text('Muito bem!'), findsOneWidget);
+          expect(find.text(controller.completionMessage), findsOneWidget);
           expect(controller.freshVictory, false);
           await screen(const SizedBox());
           await c.close();

@@ -140,7 +140,7 @@ void main() {
       );
       await tester.pump(GameTiming.completion);
       await tester.pump();
-      expect(find.text('Muito bem!'), findsOneWidget);
+      expect(find.text(controller.completionMessage), findsOneWidget);
       expect(
         find.byKey(const ValueKey('coin-flight-level-completion:1')),
         findsOneWidget,
@@ -190,7 +190,7 @@ void main() {
       await tester.tap(daily);
       await tester.pumpAndSettle();
       expect(find.byType(GameScreen), findsOneWidget);
-      expect(find.text('Muito bem!'), findsOneWidget);
+      expect(find.text(controller.completionMessage), findsOneWidget);
       expect(controller.coinRewards, isEmpty);
       expect(session.profile.balance, 110);
       await tester.pumpWidget(const SizedBox());

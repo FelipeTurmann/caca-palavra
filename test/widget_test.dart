@@ -232,6 +232,12 @@ void main() {
         await dragWord(tester, c, word.key);
       }
       await tester.pump(const Duration(milliseconds: 400));
+      final firstMessage = c.completionMessage;
+      expect(GameController.completionMessages, contains(firstMessage));
+      expect(find.text(firstMessage), findsOneWidget);
+      c.refresh();
+      await tester.pump();
+      expect(find.text(firstMessage), findsOneWidget);
       expect(find.text('Suas descobertas'), findsOneWidget);
       expect(
         find.text('3 palavras obrigatórias\n1 palavra extra descoberta'),
@@ -252,6 +258,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(ExplorerBadge), findsNothing);
       expect(find.byKey(const ValueKey('next-level')), findsOneWidget);
+      expect(c.completionMessage, isNot(firstMessage));
+      expect(find.text(c.completionMessage), findsOneWidget);
     },
   );
 

@@ -100,7 +100,7 @@ void main() {
       );
       await tester.pump(GameTiming.completion);
       await tester.pump();
-      expect(find.text('Muito bem!'), findsOneWidget);
+      expect(find.text(controller.completionMessage), findsOneWidget);
       expect(controller.freshVictory, true);
       expect(
         find.byKey(const ValueKey('word-celebration-burst')),

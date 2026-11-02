@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import '../../../core/api/api_client.dart';
 import '../application/theme_unlocks.dart';
 import '../../../core/monetization/ad_free_plan.dart';
@@ -53,6 +54,35 @@ class ExtraDiscovery {
 }
 
 class GameController extends ChangeNotifier {
+  static const completionMessages = [
+    'Você conseguiu! Parabéns!',
+    'Uau! Você mandou bem!',
+    'Que jogada incrível!',
+    'Parabéns! Desafio vencido!',
+    'Você brilhou neste desafio!',
+    'Muito bem! Continue assim!',
+    'Mandou muito bem!',
+    'Você está demais!',
+    'Excelente! Desafio superado!',
+    'Boa! Você encontrou todas!',
+  ];
+
+  final _completionRandom = Random();
+  String? _completionMessageRound;
+  String? _completionMessage;
+
+  String get completionMessage {
+    final round = _effectRound;
+    if (_completionMessageRound != round) {
+      final options = completionMessages
+          .where((message) => message != _completionMessage)
+          .toList();
+      _completionMessage = options[_completionRandom.nextInt(options.length)];
+      _completionMessageRound = round;
+    }
+    return _completionMessage!;
+  }
+
   GameController(
     this._fixtureEngine, {
     this.coordinator,
