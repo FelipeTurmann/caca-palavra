@@ -7,6 +7,16 @@ abstract interface class AdFreePlanStore {
   Future<void> activate();
 }
 
+class RemoteAdFreePlanStore implements AdFreePlanStore {
+  RemoteAdFreePlanStore(this.value);
+  final bool Function() value;
+  @override
+  Future<bool> read() async => value();
+  @override
+  Future<void> activate() async =>
+      throw StateError('Plano indisponível para compra.');
+}
+
 class SqliteAdFreePlanStore implements AdFreePlanStore {
   SqliteAdFreePlanStore(this.database);
   final Database database;

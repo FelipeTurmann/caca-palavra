@@ -1,10 +1,30 @@
-# Conecte palavras (0.10.3+19)
+# Conecte palavras (0.15.0+32)
 
-Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha, desafio diário e carteira local em SQLite. A tela inicial oferece Jogar, Continuar ou Ver resultado da campanha, além de um cartão independente do desafio diário.
+Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha e desafio diário. O fluxo normal agora integra `auth-service` e `caca-palavra-cartoon-api`: identidade, carteira, conclusões e temas vêm do servidor; a rodada parcial fica no SQLite. A loja está oculta nesta etapa. O perfil local antigo não é importado: uma nova conta começa no nível 1 com 60 moedas.
+
+Veja [configuração e validação da integração](INTEGRACAO-APIS.md), incluindo encaminhamento de portas no Android e login Google. As descrições abaixo de migrações/entregas locais anteriores são histórico; as regras de sessão, confirmação financeira e recuperação do modo online estão nesse guia.
+
+O `idJogo` é o UUID fixo `2e4ffdce-36d4-4461-856c-b00f083fed48`, compartilhado pelas APIs e pelo app. Veja [identidade do jogo e migração](GAME_ID.md) para a atualização do banco e a ordem de reinício.
+
+Para executar a versão online no Android conectado, use `./tool/run_online_android.ps1`. O script verifica as APIs, encaminha as portas e instala/executa `lib/main.dart`. APKs de 24/10, como `0.13.2-compat+26`, ainda são do protótipo local.
+
+## Campanha de 2.500 níveis
+
+A campanha contém **2.500 níveis**, com **3 a 6 respostas obrigatórias**, **4 a 6 fichas** e extras separadas. A dificuldade cresce em cinco faixas, com um nível mais leve a cada cinco. Um mesmo conjunto de letras só reaparece após pelo menos 100 posições e sempre com respostas diferentes. O catálogo usa 1.639 conjuntos de letras distintos.
+
+O léxico contém **1.379 entradas**, todas com frases locais do mascote: palavras comuns, plurais explicitamente aprovados e verbos no infinitivo. Respostas mantêm os acentos e a cedilha; a formação usa A–Z. Nomes próprios, siglas, abreviações e conjugações exclusivamente verbais ficam excluídos. Colisões como AVÓ/AVÔ têm uma única grafia canônica; não há descarte silencioso de variantes. Os sete desafios diários também foram revistos, mantendo a rotação e a data-base.
+
+Gerador reproduzível em `tool/content/`, validação compartilhada com o aplicativo e relatórios em [docs/niveis/validacao.md](docs/niveis/validacao.md). Para validar: `dart run tool/validate_catalog.dart`. A análise completa ocorre em isolate no Android durante a carga. O conjunto antigo continua apenas como fixture dos testes de mecânica.
+
+Os níveis 1–10 também foram revisados. Conforme o escopo escolhido, não há migração de partidas antigas: perfis incompatíveis são preservados e apresentam erro de carga. Esta versão deve ser testada com uma campanha nova; não limpa automaticamente carteira, compras ou temas. A curva de dificuldade é uma classificação editorial e técnica, ainda sem validação com jogadores.
 
 ## Temas
 
-Na home, **Temas**, logo abaixo de **Desafio diário**, abre as opções gratuitas **Jardim do Gatinho**, **Capivara na lagoa**, **Biblioteca encantada**, **Fundo do mar**, **Jardim das abelhas**, **Escola de magia** e **Refúgio na neve**. Toque em **Usar tema** para aplicar imediatamente; o painel permanece aberto. O subtítulo da home identifica a escolha atual. A preferência vale para campanha, diário, loja, configurações, tutorial e resultado, sem alterar níveis, palavras, moedas ou partidas salvas.
+Na home, **Temas**, logo abaixo de **Desafio diário**, abre os sete visuais com miniaturas, cadeados e saldo. **Jardim do Gatinho** é gratuito; **Capivara na lagoa** custa **500 moedas**, **Biblioteca encantada** custa **750**, **Fundo do mar** custa **1000** e **Jardim das abelhas** custa **1200**. A compra exige confirmação, desconta as moedas uma única vez e desbloqueia o tema permanentemente, aplicando-o após a compra. Temas já liberados usam **Usar tema** gratuitamente, com o painel permanecendo aberto.
+
+**Escola de magia** libera automaticamente ao alcançar o **nível 50 da campanha** e **Refúgio na neve**, o **nível 100**, sem cobrança. Ambos os marcos estão disponíveis no catálogo de 2.500 níveis. O diário compartilha os temas comprados, mas não conta como nível da campanha. Na atualização, uma seleção antiga ainda bloqueada retorna ao Jardim do Gatinho, sem cobrar ou alterar as partidas. A escolha visual vale para campanha, diário, loja, configurações, tutorial e resultado.
+
+No modo online, as compras de temas são confirmadas na API e seus recibos ficam associados à conta no SQLite. Pedidos repetidos não cobram novamente. A seleção visual continua local. [Regras e capturas da entrega local anterior](docs/temas/desbloqueio.md).
 
 O Jardim do Gatinho continua como padrão de instalações novas e perfis anteriores e agora usa o visual cartoon aprovado: fundo de jardim florido, gatinho 2D e canteiro circular com pedras e flores sob as letras. A capivara mantém seu mascote e artes cartoon: pôr do sol, lagoa com reflexos, vitórias-régias e ilha. As artes são camadas decorativas; controles, textos e fichas continuam reais e usam a mesma geometria de toque. As miniaturas reutilizam as mesmas artes locais, sem captura de telas embutida.
 
@@ -72,9 +92,11 @@ Tocar no saldo da home, campanha, diário ou resultado abre a **Loja**. A rodada
 
 Selecionar um pacote exige **Simular compra**. Cancelar não credita. Uma nova compra confirmada pode repetir o pacote; retentar o mesmo pedido não repete o crédito.
 
-**Assistir anúncio · +15 moedas** é uma simulação sem vídeo, espera artificial ou limite diário. O botão fica bloqueado enquanto a operação está em andamento. Outro toque deliberado após o sucesso concede mais 15.
+**Assistir anúncio · +15 moedas** usa o SDK oficial Google Mobile Ads no aplicativo Android normal, com o App ID de demonstração e o bloco recompensado de teste do Google. O anúncio não gera receita. As 15 moedas são concedidas somente após o callback de recompensa e o fechamento do anúncio; carregar, clicar ou fechar sem recompensa não credita. O botão fica bloqueado durante a operação. Falhas e cancelamento mostram uma mensagem na loja e permitem nova tentativa.
 
-Não há cobrança real, SDK de pagamentos, AdMob, credenciais ou backend. Os provedores de compra/anúncio são interfaces separadas, com implementações simuladas. Pedidos, recibos e lançamentos registram `simulated`; esses recibos não comprovam pagamentos reais e não devem ser reaproveitados como tal numa integração futura.
+Não há cobrança real, SDK de pagamentos, credenciais privadas ou backend. Compras de pacotes e plano sem anúncios continuam simuladas. Recompensas do SDK usam `admob_test`, `simulated: false` e `testAd: true`, separadas dos recibos antigos `simulated_ad`, que continuam compatíveis. Nenhum desses registros comprova pagamento ou receita publicitária real. Fixtures e testes existentes mantêm o provedor simulado por injeção; o carregador normal do app injeta o AdMob de teste.
+
+[Integração AdMob: IDs, fluxo, testes e limites](docs/admob-teste.md).
 
 Moedas de recompensas voam até o saldo, no estilo da coleta de extras: selo Explorador (+10), conclusão da campanha (+20 por nível) e conclusão diária (+50). A subida dura 1,1 segundo, configurada em `GameTiming.coinCollect`, independente dos 800 ms da estrela extra. O crédito já está confirmado antes do voo; concluir a animação não altera o saldo. Reabrir resultado, repetir resposta ou retentar o mesmo recibo não repete o efeito. A redução de movimento mantém a atualização do saldo sem voo.
 
@@ -82,11 +104,11 @@ Uma resposta inédita formada pelo jogador recebe um “Muito bem!” animado co
 
 ## Dica do mascote
 
-Na seleção, somente palavras ainda não encontradas e sem dica comprada pulsam. Palavras com dica já comprada permanecem estáticas, com o ícone de reconsulta disponível.
+Na seleção, somente palavras ainda não encontradas e sem dica comprada pulsam. O efeito amplia os campos em até 10%, varia sua opacidade entre 100% e 50% e leva 650 ms por sentido, mantendo o espaço de layout e sem contorno externo na linha. Palavras com dica já comprada permanecem estáticas, com o ícone de reconsulta disponível.
 
-Toque no mascote da partida para abrir o balão **Vou te ajudar! Escolha uma palavra para receber uma dica.** e escolha uma linha. Os campos das palavras disponíveis pulsam suavemente, sem contorno ao redor da linha. Confirmar **Receber dica · 70 moedas** libera uma frase sobre aquela palavra, em outro balão ligado ao personagem. A frase não revela células nem resolve a palavra. **Escolher outra palavra** volta à seleção; **Fechar** ou tocar fora do balão recolhe a fala. Durante a escolha, tocar numa linha disponível continua abrindo sua confirmação; tocar no texto não fecha o balão.
+Toque no botão quadrado de balão entre **Dica** e **Super Dica** para chamar a ajuda. O mascote da partida é decorativo e não recebe toques. Ao abrir, ele aparece maior com uma animação suave e pergunta **Quer uma dica? Escolha uma palavra para eu te ajudar.** Os campos disponíveis pulsam suavemente, sem contorno ao redor da linha. Confirmar **Receber dica · 70 moedas** libera uma frase sobre aquela palavra; o personagem permanece ampliado junto do balão, sobre a mesma partida. A frase não revela células nem resolve a palavra. **Escolher outra palavra** volta à seleção; **Fechar** ou tocar fora do balão recolhe a fala. Durante a escolha, tocar numa linha disponível continua abrindo sua confirmação; tocar no texto não fecha o balão. A animação de entrada respeita a redução de movimento.
 
-Cada uma das 61 palavras do léxico possui uma frase local. A compra vale para uma palavra naquela rodada; reler é gratuito, inclusive com saldo zero e após reabrir o aplicativo. Somente o ícone de balão identifica a linha com dica comprada; tocar nele reabre diretamente a mesma frase. Trocar tema preserva a compra e usa o mascote correspondente. Campanha e diário mantêm direitos independentes. A fala fica sobreposta ao jogo, sem redimensionar ou deslocar a roda e os campos. Balões adaptam-se a telas compactas, paisagem e texto ampliado; arrastar recolhe a fala. A pulsação respeita a opção de reduzir animações.
+Cada uma das 1.379 palavras do léxico possui uma frase local. A compra vale para uma palavra naquela rodada; reler é gratuito, inclusive com saldo zero e após reabrir o aplicativo. Somente o ícone de balão identifica a linha com dica comprada; tocar nele reabre diretamente a mesma frase. Trocar tema preserva a compra e usa o mascote correspondente. Campanha e diário mantêm direitos independentes. A fala fica sobreposta ao jogo, sem redimensionar ou deslocar a roda e os campos. Balões adaptam-se a telas compactas, paisagem e texto ampliado; arrastar recolhe a fala. A pulsação respeita a opção de reduzir animações.
 
 Revelação de letra: **50 moedas**; frase do mascote: **70**; Super Dica: **120**. O histórico mantém os preços de 30/100 para recibos e pedidos antigos. O reajuste não debita diferenças nem reinicia o progresso. O schema SQLite 6 e o payload 2 continuam com leitura compatível; frases compradas e preços são registrados junto às operações existentes.
 
@@ -189,14 +211,14 @@ A integração nova usa `stage4_integration.db`; a fixture de recuperação usa 
 | Loja | `lib/features/game/presentation/shop_screen.dart` |
 | Partida, confirmações e resultado | `lib/features/game/presentation/game_screen.dart` |
 
-A campanha permanece com dez níveis, 39 respostas e 61 entradas no léxico. Novos níveis podem ser anexados mantendo IDs e ordem. Alterar conteúdo de um nível já jogado exige migração explícita; o fingerprint detecta incompatibilidades. Atualizações do catálogo diário devem incrementar sua versão; rodadas iniciadas conservam a definição salva.
+A campanha usa o catálogo **2**, com 2.500 níveis e 1.379 entradas no léxico. O fingerprint continua detectando conteúdo incompatível; esta revisão integral não migra partidas do catálogo 1. Atualizações do catálogo diário incrementam sua versão; rodadas iniciadas conservam a definição salva quando compatíveis com as regras de leitura.
 
-Gestos, acentos/cedilha, fichas repetidas, segmentos rápidos, desfazer, multitouch, redução de movimento e selo Explorador foram preservados. Não há conta, sincronização, ranking ou cronômetro. O léxico é curado e limitado, não um dicionário completo.
+Gestos, acentos/cedilha, fichas repetidas, segmentos rápidos, desfazer, multitouch, redução de movimento e selo Explorador foram preservados. Há conta anônima, vínculo Google e estado remoto; partidas parciais continuam locais. Não há ranking ou cronômetro. O léxico é curado e limitado, não um dicionário completo.
 
 Resultados desta entrega: `docs/validacao-etapa-4.md`. Relatórios anteriores permanecem como histórico.
 
 
-## Plano sem anúncios (protótipo)
+## Plano sem anúncios (protótipo local histórico, fora do fluxo online)
 
 O botão redondo AD com bloqueio à esquerda da seleção abre a Loja. Dica e Super Dica permanecem à direita; a seleção e os parabéns têm margens iguais e ficam alinhados ao centro do círculo. No texto ampliado, os controles usam uma faixa própria.
 

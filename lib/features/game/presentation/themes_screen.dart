@@ -3,7 +3,6 @@ import '../../../core/preferences/player_preferences.dart';
 import '../../../core/theme/game_theme.dart';
 import '../../../core/theme/visual_theme_catalog.dart';
 import '../../../core/widgets/garden.dart';
-import '../application/theme_unlocks.dart';
 import 'game_controller.dart';
 
 Future<void> openThemes(BuildContext context, GameController controller) async {
@@ -141,7 +140,7 @@ class _ThemeOption extends StatelessWidget {
   final GameController controller;
 
   Future<void> unlock(BuildContext context) async {
-    final price = ThemeUnlocks.rule(theme.id).price!;
+    final price = controller.themeRule(theme.id).price!;
     final enough = controller.balance >= price;
     final confirm = await showDialog<bool>(
       context: context,
@@ -184,7 +183,7 @@ class _ThemeOption extends StatelessWidget {
     final unlocked = controller.isThemeUnlocked(theme);
     final selected =
         unlocked && controller.preferences.value.visualTheme == theme;
-    final rule = ThemeUnlocks.rule(theme.id);
+    final rule = controller.themeRule(theme.id);
     final enabled =
         !controller.busy && controller.coordinator?.hasFailedCommand != true;
     return GardenCard(

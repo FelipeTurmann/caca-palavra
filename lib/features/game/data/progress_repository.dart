@@ -33,7 +33,7 @@ abstract interface class ProgressRepository {
 }
 
 class LocalGameDatabase {
-  static const version = 6;
+  static const version = 7;
   static Future<Database> open({
     DatabaseFactory? factory,
     String? databasePath,
@@ -61,8 +61,10 @@ class LocalGameDatabase {
           await createSettings(db, legacy: false);
           await addVisualTheme(db);
           await createAdFreePlan(db);
+          await createOnlineStorage(db);
         },
         onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 7) await createOnlineStorage(db);
           if (oldVersion < 5) await createAdFreePlan(db);
           if (oldVersion < 4) {
             final existing = await db.query('profiles', limit: 1);
@@ -93,6 +95,15 @@ class LocalGameDatabase {
     if (columns.any((column) => column['name'] == 'visual_theme_id')) return;
     await db.execute(
       "ALTER TABLE app_settings ADD COLUMN visual_theme_id TEXT NOT NULL DEFAULT 'jardim_gatinho'",
+    );
+  }
+
+  static Future<void> createOnlineStorage(DatabaseExecutor db) async {
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS online_profiles (scope TEXT NOT NULL, user_id TEXT NOT NULL, balance INTEGER NOT NULL, revision INTEGER NOT NULL, payload_json TEXT NOT NULL, PRIMARY KEY(scope,user_id))',
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS online_operations (scope TEXT NOT NULL, user_id TEXT NOT NULL, operation_id TEXT NOT NULL, proposal_json TEXT NOT NULL, state TEXT NOT NULL, hint_receipt TEXT, completion_receipt TEXT, result_json TEXT, committed INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(scope,user_id,operation_id))',
     );
   }
 

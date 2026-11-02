@@ -55,17 +55,19 @@ class AdFreeButton extends StatelessWidget {
   const AdFreeButton({super.key, required this.controller});
   final GameController controller;
   @override
-  Widget build(BuildContext context) => IconButton.filledTonal(
-    key: const ValueKey('ad-free'),
-    tooltip: 'Sem anúncios · ver plano na Loja',
-    constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-    style: IconButton.styleFrom(
-      backgroundColor: const Color(0xFFD9EBE6),
-      foregroundColor: GameTheme.teal,
-    ),
-    onPressed: controller.interactive && !controller.dragging
-        ? () => openShop(context, controller)
-        : null,
-    icon: const AdFreeIcon(),
-  );
+  Widget build(BuildContext context) => !controller.shopAvailable
+      ? const SizedBox.shrink()
+      : IconButton.filledTonal(
+          key: const ValueKey('ad-free'),
+          tooltip: 'Sem anúncios · ver plano na Loja',
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFFD9EBE6),
+            foregroundColor: GameTheme.teal,
+          ),
+          onPressed: controller.interactive && !controller.dragging
+              ? () => openShop(context, controller)
+              : null,
+          icon: const AdFreeIcon(),
+        );
 }

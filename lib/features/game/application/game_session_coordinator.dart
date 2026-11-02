@@ -3,6 +3,8 @@ import 'dart:math';
 
 import '../data/game_data.dart';
 import '../data/progress_repository.dart';
+import '../data/api_progress_repository.dart';
+import '../../../core/api/api_client.dart';
 import '../domain/game_engine.dart';
 import '../domain/round_snapshot.dart';
 import 'campaign_models.dart';
@@ -106,9 +108,18 @@ class GameSessionCoordinator {
   Future<void> _tail = Future.value();
   Future<Map<String, dynamic>>? _shopInFlight;
   bool freshCompletion = false;
+  ApiProgressRepository? get online => repository is ApiProgressRepository
+      ? repository as ApiProgressRepository
+      : null;
+  bool get shopAvailable => online == null;
+  ThemeUnlockRule themeRule(String id) =>
+      online?.themeRule(id) ?? ThemeUnlocks.rule(id);
+  bool get dailyCompleted =>
+      online?.dailyCompleted == true && todayProgress?.pendingResult != true;
   bool get hasFailedCommand => _failed != null;
-  String get today => calendarDate(now());
+  String get today => online?.serverDate ?? calendarDate(now());
   bool get clockReversed =>
+      online == null &&
       profile.lastDailyDate != null &&
       today.compareTo(profile.lastDailyDate!) < 0;
   DailyProgress? get todayProgress => profile.daily[today];
@@ -137,12 +148,13 @@ class GameSessionCoordinator {
       ? Economy.dailyReward
       : profile.pendingCompletion?.reward ?? Economy.levelReward;
 
-  bool isThemeUnlocked(String id) =>
-      ThemeUnlocks.available(id, profile.purchasedThemes, profile.unlocked);
+  bool isThemeUnlocked(String id) => online != null
+      ? (online!.themes[id]?['desbloqueado'] == true)
+      : ThemeUnlocks.available(id, profile.purchasedThemes, profile.unlocked);
 
   Future<Map<String, dynamic>> purchaseTheme(String themeId) =>
       _serial(() async {
-        final rule = ThemeUnlocks.rule(themeId);
+        final rule = themeRule(themeId);
         if (rule.price == null) {
           return {
             'kind': 'theme_unlock',
@@ -220,7 +232,8 @@ class GameSessionCoordinator {
     if (repository is SqliteProgressRepository) repository.now = clock;
     var profile = await repository.initialize(data);
     for (final pending in await repository.pending()) {
-      if (pending.request['mode'] == 'daily' &&
+      if (repository is! ApiProgressRepository &&
+          pending.request['mode'] == 'daily' &&
           pending.request['date'] != calendarDate(clock())) {
         await repository.discardPending(pending.id);
         continue;
@@ -237,6 +250,13 @@ class GameSessionCoordinator {
         if (await repository.resolveOperation(pending.id) == null) rethrow;
         profile = await repository.load(data);
       }
+    }
+    if (repository is ApiProgressRepository) {
+      if ((repository.state['diario'] as Map)['versaoCatalogo'] !=
+          dailyCatalog?.version) {
+        throw const ApiFailure('CATALOG_VERSION_MISMATCH');
+      }
+      profile = await repository.synchronize(data);
     }
     final c = GameSessionCoordinator._(
       data,
@@ -340,7 +360,8 @@ class GameSessionCoordinator {
   Future<Map<String, dynamic>> _save(SaveProposal proposal) async {
     try {
       await repository.prepare(proposal);
-      if (proposal.request['mode'] == 'daily' &&
+      if (online == null &&
+          proposal.request['mode'] == 'daily' &&
           proposal.request['date'] != today) {
         throw DailyExpired();
       }
@@ -363,6 +384,22 @@ class GameSessionCoordinator {
         profile = await repository.load(data);
         _failed = null;
         return resolved.result;
+      }
+      if (online != null &&
+          error is ApiFailure &&
+          (resolved?.result['rejected'] == true ||
+              (error.status != null &&
+                  error.status! >= 400 &&
+                  error.status! < 500))) {
+        await repository.discardPending(proposal.id);
+        _failed = null;
+        try {
+          profile = await online!.synchronize(data);
+        } catch (_) {
+          profile = await repository.load(data);
+        }
+        _restore();
+        rethrow;
       }
       if (error is DailyExpired) {
         await repository.discardPending(proposal.id);
@@ -402,9 +439,16 @@ class GameSessionCoordinator {
   }
 
   Future<void> refreshDaily() => _serial(() async {
-    if (_failed == null) await _refreshDate();
+    if (_failed == null) {
+      if (online != null) {
+        profile = await online!.synchronize(data);
+        _restore();
+      }
+      await _refreshDate();
+    }
   });
   Future<void> _guard(RoundContext? expected) async {
+    if (online?.uncertainHint == true) throw const ApiFailure('HINT_UNCERTAIN');
     if (_failed != null) throw StateError('Resolva o salvamento pendente.');
     await _refreshDate();
     if (mode == GameMode.daily && dailyInvalid) {
@@ -460,9 +504,21 @@ class GameSessionCoordinator {
         ],
       );
     }
+    final explorer =
+        online != null &&
+        candidate.currentRound != null &&
+        candidate.currentRound!.extras.length >=
+            data.levels.firstWhere((l) => l.id == ctx.levelId).extraGoal;
     return (
       candidate.copyWith(
-        balance: candidate.balance + Economy.levelReward,
+        balance:
+            candidate.balance +
+            Economy.levelReward +
+            (explorer ? Economy.explorerReward : 0),
+        explorerRewardedLevels: {
+          ...candidate.explorerRewardedLevels,
+          if (explorer) ctx.levelId,
+        },
         completed: {...candidate.completed, ctx.levelId},
         unlocked: {...candidate.unlocked, ?nextLevelId},
         pendingCompletion: PendingCompletion(
@@ -486,7 +542,9 @@ class GameSessionCoordinator {
   Future<Map<String, dynamic>?> retry() => _serial(() async {
     final failed = _failed;
     if (failed == null) {
-      profile = await repository.load(data);
+      profile = online == null
+          ? await repository.load(data)
+          : await online!.synchronize(data, acknowledgeUncertain: true);
       await _refreshDate();
       _restore();
       return null;
@@ -503,6 +561,7 @@ class GameSessionCoordinator {
   });
   Future<void> startOrContinue() => _serial(() async {
     if (_failed != null) throw StateError('Resolva o salvamento pendente.');
+    if (online != null) profile = await online!.synchronize(data);
     await _refreshDate();
     mode = GameMode.campaign;
     activeDailyDate = null;
@@ -529,15 +588,25 @@ class GameSessionCoordinator {
   });
   Future<void> startDaily() => _serial(() async {
     if (_failed != null) throw StateError('Resolva o salvamento pendente.');
+    if (online != null) profile = await online!.synchronize(data);
     await _refreshDate();
     if (clockReversed) throw ClockReversed();
     final date = today;
+    if (dailyCompleted) {
+      throw const ApiFailure('DAILY_ALREADY_COMPLETED', status: 409);
+    }
     final old = profile.daily[date];
     if (old?.completed == true && old?.pendingResult == false) {
       throw StateError('Desafio de hoje concluído.');
     }
     if (old == null) {
       final definition = dailyCatalog.forDate(date);
+      if (online != null &&
+          (definition.id != (online!.state['diario'] as Map)['idDesafio'] ||
+              dailyCatalog.version !=
+                  (online!.state['diario'] as Map)['versaoCatalogo'])) {
+        throw const ApiFailure('CATALOG_VERSION_MISMATCH');
+      }
       final candidate = GameEngine(
         levels: [definition],
         lexicon: dailyCatalog.lexicon,
@@ -598,7 +667,9 @@ class GameSessionCoordinator {
         coins = outcome.$2;
         id = coins.single.id;
       }
-      if (result.explorerUnlocked && mode == GameMode.campaign) {
+      if (online == null &&
+          result.explorerUnlocked &&
+          mode == GameMode.campaign) {
         final explorerId = 'explorer-reward:${round.levelId}';
         if (!result.completed) id = explorerId;
         coins = [
@@ -949,6 +1020,7 @@ class GameSessionCoordinator {
     String id, {
     String? packageId,
   }) async {
+    if (!shopAvailable) throw const ApiFailure('SHOP_UNAVAILABLE');
     final isAd = kind == 'simulated_ad' || kind == 'admob_test';
     final isTestAd = kind == 'admob_test';
     final request = <String, dynamic>{

@@ -110,7 +110,7 @@ class _TutorialScreenState extends State<TutorialScreen>
       shuffled
           ? 'As letras mudaram de lugar. Você ainda pode formar GATO!'
           : 'Toque nas setas no centro do círculo para mudar a ordem das letras.',
-      'Extras revelam letras e ajudam a conquistar o selo Explorador. A dica de letra custa ${Economy.hintPrice} moedas; a do mascote, ${Economy.mascotHintPrice}; a Super Dica, ${Economy.superHintPrice}. Toque no saldo para abrir a Loja. Na home há um desafio diário. Seu progresso é salvo automaticamente.',
+      'Extras revelam letras e ajudam a conquistar o selo Explorador. A dica de letra custa ${Economy.hintPrice} moedas; a do mascote, ${Economy.mascotHintPrice}; a Super Dica, ${Economy.superHintPrice}. ${widget.source.shopAvailable ? 'Toque no saldo para abrir a Loja. ' : 'As moedas são confirmadas ao concluir a fase. '}Na home há um desafio diário. Seu progresso é salvo automaticamente.',
     ];
     return PopScope<void>(
       canPop: false,

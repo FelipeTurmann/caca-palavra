@@ -63,6 +63,21 @@ class SaveStatus extends StatelessWidget {
   final GameController controller;
   @override
   Widget build(BuildContext context) {
+    if (controller.coordinator?.online?.uncertainHint == true) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Uma dica pode ter sido cobrada sem que sua resposta fosse recebida. Confira o saldo antes de continuar.',
+            textAlign: TextAlign.center,
+          ),
+          TextButton(
+            onPressed: controller.busy ? null : controller.retrySave,
+            child: const Text('Atualizar saldo e continuar'),
+          ),
+        ],
+      );
+    }
     if (controller.saveError != null) {
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -72,6 +87,17 @@ class SaveStatus extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.red),
           ),
+          if (controller.coordinator?.online?.session.needsRecovery == true &&
+              controller.onSessionChanged != null)
+            FilledButton(
+              onPressed: controller.busy
+                  ? null
+                  : () async {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      await controller.onSessionChanged!();
+                    },
+              child: const Text('Recuperar acesso'),
+            ),
           TextButton(
             onPressed: controller.busy ? null : controller.retrySave,
             child: const Text('Tentar novamente'),
@@ -113,7 +139,8 @@ class HomeScreen extends StatelessWidget {
       final enabled = !controller.busy && controller.saveError == null;
       final day = coordinator.todayProgress;
       final dailyComplete =
-          day?.completed == true && day?.pendingResult == false;
+          coordinator.dailyCompleted ||
+          (day?.completed == true && day?.pendingResult == false);
       final dailySubtitle = coordinator.clockReversed
           ? 'Ajuste a data do aparelho para acessar o desafio diário.'
           : dailyComplete
@@ -191,6 +218,33 @@ class HomeScreen extends StatelessWidget {
                 final hero = Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (coordinator.online != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 12),
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Olá, ',
+                            children: [
+                              TextSpan(
+                                text: coordinator.online!.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const TextSpan(text: '!'),
+                            ],
+                          ),
+                          key: const ValueKey('home-greeting'),
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            height: 1.3,
+                            fontWeight: FontWeight.w400,
+                            color: GameTheme.ink,
+                          ),
+                        ),
+                      ),
                     brand,
                     if (scale <= 1.3) ...[
                       const SizedBox(height: 8),
@@ -207,9 +261,7 @@ class HomeScreen extends StatelessWidget {
                           '${profile.completed.length} de ${profile.catalogIds.length} níveis concluídos',
                       child: _HomeCard(
                         key: const ValueKey('home-progress'),
-                        onTap: enabled && !profile.campaignComplete
-                            ? onPlay
-                            : null,
+                        trailing: null,
                         icon: Icons.bar_chart_rounded,
                         title: 'Seu progresso',
                         subtitle: 'Nível ${profile.currentLevelId}',
@@ -304,7 +356,9 @@ class HomeScreen extends StatelessWidget {
                         alignment: Alignment.centerRight,
                         child: WalletBadge(
                           balance: profile.balance,
-                          onPressed: () => openShop(context, controller),
+                          onPressed: controller.shopAvailable
+                              ? () => openShop(context, controller)
+                              : null,
                         ),
                       ),
                     ),
@@ -387,7 +441,7 @@ class _HomeCard extends StatelessWidget {
     this.trailing = Icons.chevron_right_rounded,
   });
   final IconData icon;
-  final IconData trailing;
+  final IconData? trailing;
   final String? caption;
   final String title, subtitle;
   final VoidCallback? onTap;
@@ -492,8 +546,10 @@ class _HomeCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              Icon(trailing, size: 24, color: GameTheme.teal),
+              if (trailing != null) ...[
+                const SizedBox(width: 6),
+                Icon(trailing, size: 24, color: GameTheme.teal),
+              ],
             ],
           ),
         ),

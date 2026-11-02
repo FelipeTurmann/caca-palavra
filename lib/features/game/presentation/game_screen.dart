@@ -130,13 +130,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               onPressed: () => Navigator.pop(dialogContext, 0),
               child: Text(enough ? 'Cancelar' : 'Agora não'),
             ),
-            FilledButton(
-              key: const ValueKey('confirm-mascot-hint'),
-              onPressed: () => Navigator.pop(dialogContext, enough ? 1 : 2),
-              child: Text(
-                enough ? 'Receber dica · $price moedas' : 'Ir à loja',
+            if (enough || c.shopAvailable)
+              FilledButton(
+                key: const ValueKey('confirm-mascot-hint'),
+                onPressed: () => Navigator.pop(dialogContext, enough ? 1 : 2),
+                child: Text(
+                  enough ? 'Receber dica · $price moedas' : 'Ir à loja',
+                ),
               ),
-            ),
           ],
         );
       },
@@ -229,7 +230,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                     : 'Cancelar',
               ),
             ),
-            if (available && !enough)
+            if (available && !enough && c.shopAvailable)
               FilledButton(
                 onPressed: () => Navigator.pop(context, 2),
                 child: const Text('Ir à loja'),
@@ -598,10 +599,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                                                 WalletBadge(
                                                   key: _walletKey,
                                                   balance: controller.balance,
-                                                  onPressed: () => openShop(
-                                                    context,
-                                                    controller,
-                                                  ),
+                                                  onPressed:
+                                                      controller.shopAvailable
+                                                      ? () => openShop(
+                                                          context,
+                                                          controller,
+                                                        )
+                                                      : null,
                                                 ),
                                               ],
                                             ),
@@ -904,7 +908,9 @@ class _WideRound extends StatelessWidget {
                         WalletBadge(
                           key: walletKey,
                           balance: controller.balance,
-                          onPressed: () => openShop(context, controller),
+                          onPressed: controller.shopAvailable
+                              ? () => openShop(context, controller)
+                              : null,
                         ),
                       ],
                     ),
@@ -1095,7 +1101,9 @@ class _Completion extends StatelessWidget {
                         child: WalletBadge(
                           key: walletKey,
                           balance: controller.balance,
-                          onPressed: () => openShop(context, controller),
+                          onPressed: controller.shopAvailable
+                              ? () => openShop(context, controller)
+                              : null,
                         ),
                       ),
                       const SizedBox(height: 12),

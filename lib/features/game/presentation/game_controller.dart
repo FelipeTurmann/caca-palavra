@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../../../core/api/api_client.dart';
+import '../application/theme_unlocks.dart';
 import '../../../core/monetization/ad_free_plan.dart';
 import 'dart:ui';
 import '../../../core/preferences/player_preferences.dart';
@@ -55,6 +57,7 @@ class GameController extends ChangeNotifier {
     this._fixtureEngine, {
     this.coordinator,
     this.onHome,
+    this.onSessionChanged,
     PreferencesController? preferences,
     AdFreePlanController? adFreePlan,
     FeedbackOutput? feedbackOutput,
@@ -124,7 +127,7 @@ class GameController extends ChangeNotifier {
       }
       return outcome;
     });
-    if (saveError != null) {
+    if (saveError != null && coordinator?.online == null) {
       saveError = 'Não foi possível liberar a dica. Tente novamente.';
       showMascotWord(key, notice: saveError);
     }
@@ -212,8 +215,61 @@ class GameController extends ChangeNotifier {
 
   final GameSessionCoordinator? coordinator;
   final VoidCallback? onHome;
+  final Future<void> Function()? onSessionChanged;
+  bool get shopAvailable => coordinator?.shopAvailable ?? true;
+  ThemeUnlockRule themeRule(String id) =>
+      coordinator?.themeRule(id) ?? ThemeUnlocks.rule(id);
   bool busy = false;
   String? saveError;
+  ApiFailure? lastApiFailure;
+  bool connectionBlocked = false;
+
+  void setConnectionBlocked(bool value) {
+    if (_disposed || connectionBlocked == value) return;
+    connectionBlocked = value;
+    if (value) {
+      effects.suspend();
+      cancelTransientPresentation();
+    } else {
+      effects.resume();
+      refresh();
+    }
+  }
+
+  /// Only reads remote state. Pending economic operations require their own retry.
+  Future<void> reconnect() async {
+    await waitIdle();
+    final online = coordinator?.online;
+    if (_disposed || online == null) return;
+    try {
+      final identity = await online.session.authorized(
+        'GET',
+        '/api/v1/auth/me',
+        authService: true,
+      );
+      await online.call('GET', '/api/v1/game/me');
+      final previousRound = coordinator!.context?.identity;
+      await coordinator!.refreshDaily();
+      online.identity = identity;
+      adFreePlan.active = online.adFree;
+      if (previousRound != coordinator!.context?.identity) _clearRound();
+      if (lastApiFailure?.connectionFailure == true) {
+        lastApiFailure = null;
+        saveError = coordinator!.hasFailedCommand
+            ? 'Conexão restabelecida. Toque em Tentar novamente para concluir o salvamento pendente.'
+            : online.uncertainHint
+            ? 'Atualize o saldo antes de continuar.'
+            : null;
+      }
+    } on ApiFailure catch (error) {
+      lastApiFailure = error;
+      saveError = error.message;
+      rethrow;
+    } finally {
+      refresh();
+    }
+  }
+
   LetterReveal? paidReveal;
   int get balance => coordinator?.profile.balance ?? 0;
   bool isThemeUnlocked(VisualTheme theme) =>
@@ -263,7 +319,12 @@ class GameController extends ChangeNotifier {
     await waitIdle();
     if (_disposed || coordinator == null) return;
     try {
+      final previousRound = coordinator!.context?.identity;
       await coordinator!.refreshDaily();
+      if (previousRound != coordinator!.context?.identity) _clearRound();
+      if (coordinator!.online != null) {
+        adFreePlan.active = coordinator!.online!.adFree;
+      }
       if (dailyInvalid) {
         closeMascot(notify: false);
         clearCoinRewards(notify: false);
@@ -271,6 +332,9 @@ class GameController extends ChangeNotifier {
         clearCollectionEffects(notify: false);
         feedback = null;
       }
+    } on ApiFailure catch (error) {
+      lastApiFailure = error;
+      saveError = error.message;
     } catch (_) {
       saveError =
           'Não foi possível atualizar o desafio diário. Tente novamente.';
@@ -319,9 +383,10 @@ class GameController extends ChangeNotifier {
   bool get lastLevel => state.level.id == engine.levels.last.id;
   Future<void>? _active;
   Future<T?> run<T>(Future<T> Function() action) async {
-    if (busy) return null;
+    if (busy || connectionBlocked) return null;
     busy = true;
     saveError = null;
+    lastApiFailure = null;
     refresh();
     final previousProfile = coordinator?.profile;
     final done = Completer<void>();
@@ -342,6 +407,10 @@ class GameController extends ChangeNotifier {
       feedback = null;
       return null;
     } on ClockReversed {
+      return null;
+    } on ApiFailure catch (error) {
+      lastApiFailure = error;
+      saveError = error.message;
       return null;
     } catch (_) {
       saveError = 'Não foi possível salvar seu progresso. Tente novamente.';
@@ -444,6 +513,7 @@ class GameController extends ChangeNotifier {
       !settingsOpen &&
       !themesOpen &&
       !busy &&
+      !connectionBlocked &&
       saveError == null;
   String get preview {
     final tiles = {for (final tile in state.level.tiles) tile.id: tile.letter};

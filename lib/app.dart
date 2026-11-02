@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'core/monetization/ad_free_plan.dart';
-import 'core/monetization/admob_reward_ad_provider.dart';
+import 'core/api/api_client.dart';
+import 'core/api/auth_session.dart';
+import 'core/api/google_link.dart';
+import 'core/api/connection_monitor.dart';
+import 'core/widgets/connection_gate.dart';
 import 'core/preferences/player_preferences.dart';
 import 'core/feedback/game_feedback.dart';
 import 'core/theme/visual_theme_catalog.dart';
@@ -11,19 +15,44 @@ import 'features/game/application/game_session_coordinator.dart';
 import 'features/game/data/game_data.dart';
 import 'features/game/data/daily_catalog.dart';
 import 'features/game/data/progress_repository.dart';
+import 'features/game/data/api_progress_repository.dart';
+import 'features/game/presentation/account_screen.dart';
 import 'features/game/presentation/game_controller.dart';
 import 'features/game/presentation/game_screen.dart';
 import 'features/game/presentation/home_screen.dart';
 
+AuthSession? _defaultSession;
+final defaultConnection = ConnectionMonitor(AndroidNetworkAccessSource());
+AuthSession get defaultSession {
+  final config = ApiConfig.environmentConfig();
+  return _defaultSession ??= AuthSession(
+    ApiClient(config, connection: defaultConnection),
+    SecureCredentialStore(config.namespace),
+  );
+}
+
 Future<GameSessionCoordinator> loadGame() async {
+  final auth = defaultSession;
+  await auth.restore();
+  if (auth.googleOperation?['started'] == true) {
+    try {
+      await GoogleLink(
+        auth,
+        GoogleSdkIdentityProvider(auth.api.config.googleClientId),
+      ).resume();
+    } on ApiFailure catch (e) {
+      if (e.code != 'GOOGLE_OPERATION_EXPIRED') rethrow;
+      await auth.clearGoogle();
+    }
+  }
+  await auth.ensure();
   final data = await GameData.load();
-  final repository = await SqliteProgressRepository.open();
+  final repository = await ApiProgressRepository.openOnline(auth);
   try {
     return await GameSessionCoordinator.create(
       data,
       repository,
       dailyCatalog: await DailyCatalog.load(),
-      adProvider: AdMobTestRewardAdProvider(),
     );
   } catch (_) {
     await repository.close();
@@ -37,26 +66,66 @@ class WordGameApp extends StatefulWidget {
     this.loader,
     this.preferencesStore,
     this.feedbackOutput,
+    this.connection,
   });
   final PreferencesStore? preferencesStore;
   final FeedbackOutput? feedbackOutput;
+  final ConnectionMonitor? connection;
   final Future<GameSessionCoordinator> Function()? loader;
   @override
   State<WordGameApp> createState() => _WordGameAppState();
 }
 
 class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
+  late final ConnectionMonitor? _connection =
+      widget.connection ?? (widget.loader == null ? defaultConnection : null);
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _connection?.addListener(_connectionChanged);
+    if (_connection != null) unawaited(_connection.start());
+  }
+
+  void _connectionChanged() {
+    if (mounted) _loaded?.setConnectionBlocked(_connection!.blocked);
+  }
+
+  Future<void> _retryConnection() async {
+    final connection = _connection;
+    if (connection == null) return;
+    await connection.retry(() async {
+      try {
+        final controller = _loaded;
+        if (controller == null) {
+          setState(() => _loading = _load());
+          await _loading;
+        } else {
+          await controller.reconnect();
+        }
+        return true;
+      } on ApiFailure catch (error) {
+        if (!error.connectionFailure) return true;
+        connection.reportServiceFailure();
+        return false;
+      } catch (_) {
+        // The startup view still presents non-network errors with their retry.
+        return _loaded == null;
+      }
+    });
+  }
+
+  Future<void> _resumeConnection() async {
+    await _connection?.refreshNetwork();
+    if (!mounted || _connection?.blocked == true) return;
+    _loaded?.effects.resume();
+    await _loaded?.refreshCalendar();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loaded?.effects.resume();
-      _loaded?.refreshCalendar();
+      unawaited(_resumeConnection());
     } else {
       _loaded?.suspendPresentation();
     }
@@ -65,7 +134,28 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   late Future<GameController> _loading = _load();
   GameController? _loaded;
   bool _playing = false;
+  bool _recoverGoogle = false;
+
+  Future<void> _reloadAccount() async {
+    final previous = _loaded;
+    await previous?.waitIdle();
+    await previous?.preferences.flush();
+    previous?.dispose();
+    await previous?.coordinator?.close();
+    _loaded = null;
+    if (mounted) {
+      setState(() {
+        _playing = false;
+        _loading = _load();
+      });
+    }
+  }
+
   Future<GameController> _load() async {
+    await _connection?.start();
+    if (_connection?.internetAvailable == false) {
+      throw const ApiFailure('OFFLINE', requestNotSent: true);
+    }
     final session = await (widget.loader ?? loadGame)();
     final repository = session.repository;
     final store =
@@ -80,13 +170,16 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     final controller = GameController(
       session.engine,
       adFreePlan: await AdFreePlanController.load(
-        repository is SqliteProgressRepository
+        repository is ApiProgressRepository
+            ? RemoteAdFreePlanStore(() => repository.adFree)
+            : repository is SqliteProgressRepository
             ? SqliteAdFreePlanStore(repository.database)
             : MemoryAdFreePlanStore(),
       ),
       preferences: preferences,
       feedbackOutput: widget.feedbackOutput ?? AndroidFeedbackOutput(),
       coordinator: session,
+      onSessionChanged: _reloadAccount,
       onHome: () {
         if (mounted) setState(() => _playing = false);
       },
@@ -96,8 +189,15 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
       await session.close();
     } else {
       setState(() => _loaded = controller);
+      controller.setConnectionBlocked(_connection?.blocked == true);
       unawaited(controller.effects.prepare());
       controller.scheduleCalendarCheck();
+      if (_recoverGoogle) {
+        _recoverGoogle = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) openAccount(context, controller, startGoogle: true);
+        });
+      }
     }
     return controller;
   }
@@ -121,6 +221,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _connection?.removeListener(_connectionChanged);
     _loaded?.dispose();
     if (_loaded != null) {
       final controller = _loaded!;
@@ -140,8 +241,15 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     title: 'Conecte palavras',
     theme: GameTheme.theme,
     builder: (context, child) {
+      final content = _connection == null
+          ? child!
+          : ConnectionGate(
+              connection: _connection,
+              onRetry: () => unawaited(_retryConnection()),
+              child: child!,
+            );
       final preferences = _loaded?.preferences;
-      if (preferences == null) return child!;
+      if (preferences == null) return content;
       return ListenableBuilder(
         listenable: preferences,
         builder: (context, _) {
@@ -155,7 +263,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
                   disableAnimations:
                       media.disableAnimations || preferences.value.reduceMotion,
                 ),
-                child: child!,
+                child: content,
               ),
             ),
           );
@@ -166,6 +274,16 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
       future: _loading,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
+          final error = snapshot.error;
+          if (error is ApiFailure && error.connectionFailure) {
+            return Scaffold(
+              body: ConnectionNotice(
+                offline: error.code == 'OFFLINE',
+                checking: false,
+                onRetry: () => setState(() => _loading = _load()),
+              ),
+            );
+          }
           return Scaffold(
             body: SafeArea(
               child: Center(
@@ -184,6 +302,11 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
                             (snapshot.error as FormatException).message,
                             textAlign: TextAlign.center,
                           ),
+                        if (snapshot.error is ApiFailure)
+                          Text(
+                            (snapshot.error as ApiFailure).message,
+                            textAlign: TextAlign.center,
+                          ),
                         const SizedBox(height: 20),
                         FilledButton(
                           onPressed: () => setState(() {
@@ -191,6 +314,49 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
                           }),
                           child: const Text('Tentar novamente'),
                         ),
+                        if (snapshot.error is ApiFailure &&
+                            widget.loader == null &&
+                            {
+                              'SESSION_RECOVERY_REQUIRED',
+                              'INVALID_REFRESH_TOKEN',
+                              'USER_BLOCKED',
+                              'INVALID_ACCESS_TOKEN',
+                              'ACCESS_TOKEN_EXPIRED',
+                            }.contains((snapshot.error as ApiFailure).code))
+                          TextButton(
+                            onPressed: () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (dialog) => AlertDialog(
+                                  title: const Text('Recuperar conta Google'),
+                                  content: const Text(
+                                    'Vamos abrir uma conta temporária para localizar sua conta Google. Seu progresso anterior será preservado no aparelho. Na próxima tela, escolha a conta que deseja manter.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialog, false),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialog, true),
+                                      child: const Text('Continuar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (ok != true || !mounted) return;
+                              setState(() {
+                                _recoverGoogle = true;
+                                _loading = () async {
+                                  await defaultSession.createRecoveryIdentity();
+                                  return _load();
+                                }();
+                              });
+                            },
+                            child: const Text('Recuperar conta com Google'),
+                          ),
                       ],
                     ),
                   ),

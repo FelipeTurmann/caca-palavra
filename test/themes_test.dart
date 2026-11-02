@@ -112,7 +112,7 @@ void main() {
 
   for (final legacyVersion in [1, 3, 4, 5]) {
     test(
-      'SQLite $legacyVersion → 6 preserves rounds, ledger, preferences and plan',
+      'SQLite $legacyVersion → ${LocalGameDatabase.version} preserves rounds, ledger, preferences and plan',
       () async {
         sqfliteFfiInit();
         final dir = await Directory.systemTemp.createTemp('themes-migration-');
@@ -171,6 +171,8 @@ void main() {
         if (legacyVersion < 2) {
           await repo.database.execute('DROP TABLE operation_requests');
         }
+        await repo.database.execute('DROP TABLE online_profiles');
+        await repo.database.execute('DROP TABLE online_operations');
         await repo.database.setVersion(legacyVersion);
         await session.close();
 
@@ -183,7 +185,9 @@ void main() {
           repo,
           now: () => DateTime(2026, 10, 22, 12),
         );
-        expect(await repo.database.getVersion(), 6);
+        expect(await repo.database.getVersion(), LocalGameDatabase.version);
+        expect(await repo.database.query('online_profiles'), isEmpty);
+        expect(await repo.database.query('online_operations'), isEmpty);
         expect(session.profile.toPayload(), snapshot);
         expect(await repo.database.query('coin_transactions'), ledger);
         if (legacyVersion >= 2) {

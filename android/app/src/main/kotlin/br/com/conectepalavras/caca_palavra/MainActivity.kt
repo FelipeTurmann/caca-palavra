@@ -18,6 +18,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var networkStatus: NetworkStatusStream? = null
     private var pool: SoundPool? = null
     private val sounds = mutableMapOf<String, Int>()
     private val ready = mutableSetOf<Int>()
@@ -41,6 +42,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        networkStatus = NetworkStatusStream(this, flutterEngine.dartExecutor.binaryMessenger)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(noisy, IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), RECEIVER_NOT_EXPORTED)
         } else {
@@ -116,6 +118,7 @@ class MainActivity : FlutterActivity() {
     override fun onPause() { foreground = false; stopSounds(); super.onPause() }
     override fun onResume() { super.onResume(); foreground = true }
     override fun onDestroy() {
+        networkStatus?.dispose()
         runCatching { unregisterReceiver(noisy) }
         releaseSounds()
         super.onDestroy()
