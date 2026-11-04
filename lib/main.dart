@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   LicenseRegistry.addLicense(() async* {
     yield LicenseEntryWithLineBreaks([
       'pt-br — referência lexical',

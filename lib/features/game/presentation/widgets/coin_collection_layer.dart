@@ -1,10 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../../core/theme/game_theme.dart';
-import '../../domain/game_engine.dart';
 import '../game_controller.dart';
 
-/// Only presents credits already committed. Finishing a flight never pays coins.
+/// Presents rewards visually. Finishing a flight never changes the balance.
 class CoinCollectionLayer extends StatelessWidget {
   const CoinCollectionLayer({
     super.key,
@@ -23,7 +22,7 @@ class CoinCollectionLayer extends StatelessWidget {
         children: [
           for (final reward in controller.coinRewards)
             if (reward.origin != CoinRewardOrigin.completion ||
-                controller.state.phase == RoundPhase.completed)
+                controller.showingCompletion)
               _CoinFlight(
                 key: ValueKey('coin-flight-${reward.id}'),
                 reward: reward,

@@ -45,12 +45,40 @@ void main() {
         final originalUser = auth.userId;
         await auth.refresh();
         expect(auth.userId, originalUser);
+        final playerName = 'Teste API ${originalUser.substring(0, 8)}';
         await auth.authorized(
           'PATCH',
           '/api/v1/auth/me/nome',
           authService: true,
-          body: {'nomeUsuario': 'Teste Flutter API'},
+          body: {'nomeUsuario': playerName},
         );
+        final other = AuthSession(api, _EphemeralCredentials());
+        await other.restore();
+        await other.ensure();
+        final beforeRename = await other.authorized(
+          'GET',
+          '/api/v1/auth/me',
+          authService: true,
+        );
+        await expectLater(
+          other.authorized(
+            'PATCH',
+            '/api/v1/auth/me/nome',
+            authService: true,
+            body: {'nomeUsuario': ' ${playerName.toLowerCase()} '},
+          ),
+          throwsA(
+            isA<ApiFailure>()
+                .having((error) => error.status, 'status', 409)
+                .having((error) => error.code, 'code', 'PLAYER_NAME_TAKEN'),
+          ),
+        );
+        final afterRename = await other.authorized(
+          'GET',
+          '/api/v1/auth/me',
+          authService: true,
+        );
+        expect(afterRename['nomeUsuario'], beforeRename['nomeUsuario']);
         final data = loadProductionData();
         final repo = ApiProgressRepository(db, auth);
         final game = await GameSessionCoordinator.create(
@@ -60,7 +88,7 @@ void main() {
         );
         expect(game.profile.balance, 60);
         expect(game.profile.currentLevelId, 1);
-        expect(repo.name, 'Teste Flutter API');
+        expect(repo.name, playerName);
         expect(game.shopAvailable, false);
         await game.startOrContinue();
         await game.purchaseHint(operationId: 'live-letter-hint');

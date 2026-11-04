@@ -388,7 +388,10 @@ class LagoonHero extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final diameter = math.min(62.0, width * .17);
+            final diameter = math.min(
+              math.min(62.0, width * .17),
+              height * .40,
+            );
             final centers = [
               Offset(width * .13, height * .26),
               Offset(width * .33, height * .40),

@@ -58,10 +58,19 @@ class ApiProgressRepository extends SqliteProgressRepository {
     bool initialize = false,
     bool refreshThemes = true,
   }) async {
-    final next = await call(
-      initialize ? 'POST' : 'GET',
-      initialize ? '/api/v1/game/inicializar' : '/api/v1/game/me',
-    );
+    // Initialization must create the player before querying their themes.
+    // Once initialized, these reads are independent and share one network wait.
+    final responses = await Future.wait([
+      call(
+        initialize ? 'POST' : 'GET',
+        initialize ? '/api/v1/game/inicializar' : '/api/v1/game/me',
+      ),
+      if (refreshThemes && !initialize) ...[
+        call('GET', '/api/v1/temas'),
+        call('GET', '/api/v1/temas/me'),
+      ],
+    ]);
+    final next = responses.first;
     final progress = next['progresso'] as Map;
     final daily = next['diario'] as Map;
     if (next['idUsuario'] != userId || next['idJogo'] != ApiConfig.gameId) {
@@ -78,10 +87,14 @@ class ApiProgressRepository extends SqliteProgressRepository {
         ((next['moedas'] as Map)['qtdMoedas'] as int) < 0) {
       throw const ApiFailure('INVALID_RESPONSE');
     }
-    state = next;
     if (refreshThemes) {
-      final catalog = await call('GET', '/api/v1/temas');
-      final owned = await call('GET', '/api/v1/temas/me');
+      final themeResponses = initialize
+          ? await Future.wait([
+              call('GET', '/api/v1/temas'),
+              call('GET', '/api/v1/temas/me'),
+            ])
+          : responses.sublist(1);
+      final catalog = themeResponses[0], owned = themeResponses[1];
       if (catalog['idUsuario'] != userId || owned['idUsuario'] != userId) {
         throw const ApiFailure('INVALID_RESPONSE');
       }
@@ -96,6 +109,7 @@ class ApiProgressRepository extends SqliteProgressRepository {
           },
       };
     }
+    state = next;
   }
 
   ThemeUnlockRule themeRule(String id) {

@@ -35,8 +35,11 @@ class GoogleLink {
   GoogleLink(this.session, this.provider);
   final AuthSession session;
   final GoogleIdentityProvider provider;
-  Future<Map<String, dynamic>> consult() async {
+  Future<Map<String, dynamic>> consult({
+    void Function()? onIdentitySelected,
+  }) async {
     final proof = await provider.idToken();
+    onIdentitySelected?.call();
     final lookup = await session.authorized(
       'POST',
       '/api/v1/contas/google/consultar',

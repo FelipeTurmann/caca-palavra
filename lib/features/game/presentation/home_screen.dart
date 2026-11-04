@@ -159,6 +159,25 @@ class HomeScreen extends StatelessWidget {
                     constraints.maxWidth >= 800 &&
                     constraints.maxWidth > constraints.maxHeight;
                 final scale = MediaQuery.textScalerOf(context).scale(1);
+                // Keep the normal phone home within the safe viewport. Large
+                // accessibility text and recovery notices retain natural flow.
+                final fitHome =
+                    !wide &&
+                    constraints.maxHeight >= 480 &&
+                    constraints.maxHeight > constraints.maxWidth &&
+                    scale <= 1.3 &&
+                    !profile.campaignComplete &&
+                    !coordinator.clockReversed &&
+                    controller.saveError == null &&
+                    coordinator.online?.uncertainHint != true &&
+                    controller.preferences.error == null;
+                final compact = fitHome && constraints.maxHeight < 740;
+                final gap = compact ? 8.0 : 14.0;
+                final actionLabel = compact && profile.hasStarted
+                    ? (profile.pendingCompletion != null
+                          ? 'Ver resultado'
+                          : 'Continuar')
+                    : label;
                 final width = math.min(
                   wide ? 440.0 : 460.0,
                   constraints.maxWidth - 40,
@@ -215,12 +234,13 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 );
-                final hero = Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (coordinator.online != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6, bottom: 12),
+                final greeting = coordinator.online == null
+                    ? null
+                    : Padding(
+                        padding: EdgeInsets.only(
+                          top: compact ? 2 : 6,
+                          bottom: compact ? 6 : 12,
+                        ),
                         child: Text.rich(
                           TextSpan(
                             text: 'Olá, ',
@@ -237,6 +257,8 @@ class HomeScreen extends StatelessWidget {
                           key: const ValueKey('home-greeting'),
                           textAlign: TextAlign.center,
                           softWrap: true,
+                          maxLines: fitHome ? 2 : null,
+                          overflow: fitHome ? TextOverflow.ellipsis : null,
                           style: const TextStyle(
                             fontSize: 17,
                             height: 1.3,
@@ -244,7 +266,11 @@ class HomeScreen extends StatelessWidget {
                             color: GameTheme.ink,
                           ),
                         ),
-                      ),
+                      );
+                final hero = Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ?greeting,
                     brand,
                     if (scale <= 1.3) ...[
                       const SizedBox(height: 8),
@@ -261,6 +287,7 @@ class HomeScreen extends StatelessWidget {
                           '${profile.completed.length} de ${profile.catalogIds.length} níveis concluídos',
                       child: _HomeCard(
                         key: const ValueKey('home-progress'),
+                        compact: compact,
                         trailing: null,
                         icon: Icons.bar_chart_rounded,
                         title: 'Seu progresso',
@@ -271,7 +298,7 @@ class HomeScreen extends StatelessWidget {
                             profile.catalogIds.length,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: gap),
                     if (profile.campaignComplete) ...[
                       Text(
                         'Campanha concluída!',
@@ -287,18 +314,27 @@ class HomeScreen extends StatelessWidget {
                         key: const ValueKey('play'),
                         onPressed: enabled ? onPlay : null,
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          padding: EdgeInsets.symmetric(
+                            vertical: compact ? 0 : 3,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.play_arrow_rounded, size: 36),
+                              Icon(
+                                Icons.play_arrow_rounded,
+                                size: compact ? 30 : 36,
+                              ),
                               const SizedBox(width: 12),
                               Flexible(
                                 child: Text(
-                                  label,
+                                  actionLabel,
+                                  semanticsLabel: label,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 25,
+                                  style: TextStyle(
+                                    fontFamily: Theme.of(
+                                      context,
+                                    ).textTheme.titleLarge?.fontFamily,
+                                    fontSize: compact ? 22 : 25,
                                     fontWeight: FontWeight.w900,
                                   ),
                                 ),
@@ -307,12 +343,13 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: gap),
                     Tooltip(
                       message:
                           'Ganhe 50 moedas ao concluir. O desafio muda à meia-noite do aparelho e o progresso incompleto expira.',
                       child: _HomeCard(
                         key: const ValueKey('daily-play'),
+                        compact: compact,
                         onTap:
                             enabled &&
                                 !coordinator.clockReversed &&
@@ -322,7 +359,7 @@ class HomeScreen extends StatelessWidget {
                         icon: Icons.calendar_month_rounded,
                         title: 'Desafio diário',
                         subtitle: dailySubtitle,
-                        caption: dailyComplete
+                        caption: dailyComplete && !compact
                             ? 'Você já recebeu 50 moedas hoje.'
                             : null,
                         trailing: dailyComplete
@@ -333,9 +370,10 @@ class HomeScreen extends StatelessWidget {
                         coral: true,
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    SizedBox(height: gap),
                     _HomeCard(
                       key: const ValueKey('home-themes'),
+                      compact: compact,
                       onTap: controller.busy
                           ? null
                           : () => openThemes(context, controller),
@@ -343,8 +381,10 @@ class HomeScreen extends StatelessWidget {
                       title: 'Temas',
                       subtitle: 'Atual: ${VisualThemeScope.of(context).title}',
                     ),
-                    SaveStatus(controller: controller),
-                    ThemeSaveFeedback(preferences: controller.preferences),
+                    if (!fitHome) ...[
+                      SaveStatus(controller: controller),
+                      ThemeSaveFeedback(preferences: controller.preferences),
+                    ],
                   ],
                 );
                 final navigation = Row(
@@ -364,6 +404,90 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ],
                 );
+                if (fitHome) {
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 500),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          compact ? 14 : 20,
+                          6,
+                          compact ? 14 : 20,
+                          12,
+                        ),
+                        child: Column(
+                          key: const ValueKey('home-fitted-layout'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            navigation,
+                            SizedBox(
+                              height: 4,
+                              child:
+                                  controller.busy ||
+                                      controller.preferences.savingTheme
+                                  ? const LinearProgressIndicator(
+                                      semanticsLabel: 'Salvando progresso',
+                                    )
+                                  : null,
+                            ),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  ?greeting,
+                                  Expanded(
+                                    child: LayoutBuilder(
+                                      builder: (context, space) {
+                                        if (space.maxHeight < 48) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        final withArt = space.maxHeight >= 180;
+                                        return Column(
+                                          children: [
+                                            Expanded(
+                                              flex: withArt ? 2 : 1,
+                                              child: Center(
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: SizedBox(
+                                                    width: width,
+                                                    child: brand,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            if (withArt)
+                                              Expanded(
+                                                flex: 3,
+                                                child: LayoutBuilder(
+                                                  builder: (context, art) =>
+                                                      Center(
+                                                        child: HomeWordGarden(
+                                                          height: math.min(
+                                                            art.maxHeight,
+                                                            artHeight,
+                                                          ),
+                                                          fullBleed: true,
+                                                        ),
+                                                      ),
+                                                ),
+                                              ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            SizedBox(height: compact ? 8 : 16),
+                            cards,
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
@@ -439,6 +563,7 @@ class _HomeCard extends StatelessWidget {
     this.progressValue = 0,
     this.caption,
     this.trailing = Icons.chevron_right_rounded,
+    this.compact = false,
   });
   final IconData icon;
   final IconData? trailing;
@@ -446,6 +571,7 @@ class _HomeCard extends StatelessWidget {
   final String title, subtitle;
   final VoidCallback? onTap;
   final bool coral, progress;
+  final bool compact;
   final double progressValue;
   @override
   Widget build(BuildContext context) => GardenCard(
@@ -457,12 +583,15 @@ class _HomeCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 12 : 14,
+            vertical: compact ? 8 : 12,
+          ),
           child: Row(
             children: [
               Container(
-                width: 50,
-                height: 50,
+                width: compact ? 40 : 50,
+                height: compact ? 40 : 50,
                 decoration: BoxDecoration(
                   color: VisualThemeScope.of(context).isLagoon
                       ? null
@@ -491,7 +620,7 @@ class _HomeCard extends StatelessWidget {
                   progress && VisualThemeScope.of(context).isLagoon
                       ? Icons.star_rounded
                       : icon,
-                  size: 36,
+                  size: compact ? 28 : 36,
                   color: VisualThemeScope.of(context).isLagoon
                       ? Colors.white
                       : coral
@@ -499,7 +628,7 @@ class _HomeCard extends StatelessWidget {
                       : GameTheme.teal,
                 ),
               ),
-              const SizedBox(width: 14),
+              SizedBox(width: compact ? 10 : 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,7 +649,7 @@ class _HomeCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize:
                             progress && !VisualThemeScope.of(context).isLagoon
-                            ? 23
+                            ? (compact ? 20 : 23)
                             : 14,
                         fontWeight: progress
                             ? FontWeight.w900

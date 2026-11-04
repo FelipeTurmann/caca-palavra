@@ -8,6 +8,12 @@ O `idJogo` é o UUID fixo `2e4ffdce-36d4-4461-856c-b00f083fed48`, compartilhado 
 
 Para executar a versão online no Android conectado, use `./tool/run_online_android.ps1`. O script verifica as APIs, encaminha as portas e instala/executa `lib/main.dart`. APKs de 24/10, como `0.13.2-compat+26`, ainda são do protótipo local.
 
+Ao iniciar, o app mostra “Preparando seu jogo…” até carregar o perfil. A conexão Google apresenta uma espera durante a consulta e a confirmação, preservando a escolha entre contas, e oculta os dados da conta anterior enquanto carrega o progresso escolhido. Ao reconhecer a última palavra, mostra “Salvando sua conquista…”; moedas e avanço só aparecem após a confirmação do servidor. Falhas mantêm a rodada e o salvamento pendente para tentativa explícita. As leituras independentes de progresso e temas ocorrem em paralelo, e a conclusão online não acrescenta uma espera de animação depois da confirmação.
+
+O nome do jogador é exclusivo por jogo e tem de 2 a 30 caracteres. O auth-service V4 compara nomes ignorando maiúsculas e espaços extras, preservando acentos. Ao receber `PLAYER_NAME_TAKEN` (HTTP 409), o app mantém o editor aberto com “Esse nome de jogador já existe. Tente outro.”, permitindo corrigir o nome sem alterar o perfil anterior.
+
+O app Android solicita orientação vertical. A tela inicial reserva espaço para os controles e adapta título, arte, ícones e espaçamento à altura útil, sem rolagem em celulares a partir de 320 × 568 com fonte até 130%. Fontes de acessibilidade maiores, janelas muito pequenas e avisos extensos preservam a rolagem para manter a leitura e os botões acessíveis. Em telas grandes nas quais o Android ignora o bloqueio de orientação, o layout alternativo continua disponível.
+
 ## Campanha de 2.500 níveis
 
 A campanha contém **2.500 níveis**, com **3 a 6 respostas obrigatórias**, **4 a 6 fichas** e extras separadas. A dificuldade cresce em cinco faixas, com um nível mais leve a cada cinco. Um mesmo conjunto de letras só reaparece após pelo menos 100 posições e sempre com respostas diferentes. O catálogo usa 1.639 conjuntos de letras distintos.

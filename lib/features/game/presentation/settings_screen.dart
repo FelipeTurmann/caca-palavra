@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/widgets/garden.dart';
+import '../../../core/widgets/game_loading.dart';
 import '../../../core/widgets/motion_policy.dart';
 import 'game_controller.dart';
 import 'tutorial_screen.dart';
@@ -60,6 +61,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool accountBusy = false;
+  String? loadingMessage;
   GameController get controller => widget.controller;
   @override
   Widget build(BuildContext context) {
@@ -77,118 +79,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ?.session
                     .googleOperation?['started'] ==
                 true;
-        return PopScope(
-          canPop: !locked,
-          child: Scaffold(
-            appBar: AppBar(
-              title: const Text('Configurações'),
-              leading: IconButton(
-                tooltip: 'Fechar configurações',
-                icon: const Icon(Icons.close_rounded),
-                onPressed: locked ? null : () => Navigator.pop(context),
+        return GameLoadingOverlay(
+          message: loadingMessage,
+          child: PopScope(
+            canPop: !locked,
+            child: Scaffold(
+              appBar: AppBar(
+                title: const Text('Configurações'),
+                leading: IconButton(
+                  tooltip: 'Fechar configurações',
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: locked ? null : () => Navigator.pop(context),
+                ),
               ),
-            ),
-            body: Garden(
-              quiet: true,
-              child: SafeArea(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        if (controller.coordinator?.online != null) ...[
-                          PlayerAccountCard(
-                            controller: controller,
-                            onBusyChanged: (value) =>
-                                setState(() => accountBusy = value),
-                            onSessionChanged: () =>
-                                Navigator.pop(context, true),
+              body: Garden(
+                quiet: true,
+                child: SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          if (controller.coordinator?.online != null) ...[
+                            PlayerAccountCard(
+                              controller: controller,
+                              onBusyChanged: (value) =>
+                                  setState(() => accountBusy = value),
+                              onLoadingChanged: (value) =>
+                                  setState(() => loadingMessage = value),
+                              onSessionChanged: () =>
+                                  Navigator.pop(context, true),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          GardenCard(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SwitchListTile(
+                                  key: const ValueKey('setting-sound'),
+                                  title: const Text('Efeitos sonoros'),
+                                  subtitle: const Text(
+                                    'Toques e sons suaves durante o jogo.',
+                                  ),
+                                  value: value.sound,
+                                  onChanged: (v) => preferences.update(
+                                    value.copyWith(sound: v),
+                                  ),
+                                ),
+                                SwitchListTile(
+                                  key: const ValueKey('setting-haptics'),
+                                  title: const Text('Vibração'),
+                                  subtitle: const Text(
+                                    'Pequenos pulsos ao selecionar e acertar.',
+                                  ),
+                                  value: value.haptics,
+                                  onChanged: (v) => preferences.update(
+                                    value.copyWith(haptics: v),
+                                  ),
+                                ),
+                                SwitchListTile(
+                                  key: const ValueKey('setting-motion'),
+                                  title: const Text('Reduzir animações'),
+                                  subtitle: Text(
+                                    system
+                                        ? 'Redução ativa pelo sistema.'
+                                        : 'Mantém as cores e os resultados, com menos movimento.',
+                                  ),
+                                  value: value.reduceMotion,
+                                  onChanged: (v) => preferences.update(
+                                    value.copyWith(reduceMotion: v),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                        ],
-                        GardenCard(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SwitchListTile(
-                                key: const ValueKey('setting-sound'),
-                                title: const Text('Efeitos sonoros'),
-                                subtitle: const Text(
-                                  'Toques e sons suaves durante o jogo.',
-                                ),
-                                value: value.sound,
-                                onChanged: (v) => preferences.update(
-                                  value.copyWith(sound: v),
-                                ),
-                              ),
-                              SwitchListTile(
-                                key: const ValueKey('setting-haptics'),
-                                title: const Text('Vibração'),
-                                subtitle: const Text(
-                                  'Pequenos pulsos ao selecionar e acertar.',
-                                ),
-                                value: value.haptics,
-                                onChanged: (v) => preferences.update(
-                                  value.copyWith(haptics: v),
-                                ),
-                              ),
-                              SwitchListTile(
-                                key: const ValueKey('setting-motion'),
-                                title: const Text('Reduzir animações'),
-                                subtitle: Text(
-                                  system
-                                      ? 'Redução ativa pelo sistema.'
-                                      : 'Mantém as cores e os resultados, com menos movimento.',
-                                ),
-                                value: value.reduceMotion,
-                                onChanged: (v) => preferences.update(
-                                  value.copyWith(reduceMotion: v),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        VolumeButton(
-                          key: const ValueKey('review-tutorial'),
-                          onPressed: locked
-                              ? null
-                              : () async {
-                                  controller.cancelGesture();
-                                  await Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => TutorialScreen(
-                                        source: controller,
-                                        review: true,
-                                        onFinish: (_) async {
-                                          Navigator.of(context).pop();
-                                        },
+                          const SizedBox(height: 20),
+                          VolumeButton(
+                            key: const ValueKey('review-tutorial'),
+                            onPressed: locked
+                                ? null
+                                : () async {
+                                    controller.cancelGesture();
+                                    await Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => TutorialScreen(
+                                          source: controller,
+                                          review: true,
+                                          onFinish: (_) async {
+                                            Navigator.of(context).pop();
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                  await controller.refreshCalendar();
-                                },
-                          child: const Text('Como jogar'),
-                        ),
-                        if (preferences.error != null) ...[
-                          const SizedBox(height: 16),
-                          Semantics(
-                            liveRegion: true,
-                            child: Text(preferences.error!),
+                                    );
+                                    await controller.refreshCalendar();
+                                  },
+                            child: const Text('Como jogar'),
                           ),
-                          TextButton(
-                            onPressed: preferences.retry,
-                            child: const Text('Tentar novamente'),
+                          if (preferences.error != null) ...[
+                            const SizedBox(height: 16),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(preferences.error!),
+                            ),
+                            TextButton(
+                              onPressed: preferences.retry,
+                              child: const Text('Tentar novamente'),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Suas escolhas valem para a campanha, o desafio diário e a demonstração.',
+                            textAlign: TextAlign.center,
                           ),
                         ],
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Suas escolhas valem para a campanha, o desafio diário e a demonstração.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

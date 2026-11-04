@@ -134,12 +134,6 @@ void main() {
       await tester.pump();
       expect(session.profile.balance, 200);
       expect(controller.coinRewards.single.amount, 20);
-      expect(
-        find.byKey(const ValueKey('coin-flight-level-completion:1')),
-        findsNothing,
-      );
-      await tester.pump(GameTiming.completion);
-      await tester.pump();
       expect(find.text(controller.completionMessage), findsOneWidget);
       expect(
         find.byKey(const ValueKey('coin-flight-level-completion:1')),
@@ -222,7 +216,7 @@ void main() {
   );
 
   test(
-    'failed completion never flies coins before commit and a recovered receipt queues one reward',
+    'failed completion keeps one visual reward and retries without crediting twice',
     () async {
       final repo = FailingRewardRepository();
       final session = await GameSessionCoordinator.create(loadData(), repo);
@@ -246,16 +240,15 @@ void main() {
       controller.up(1, geometry.centers[ids.last]!);
       await controller.waitIdle();
       expect(controller.saveError, isNotNull);
-      expect(controller.coinRewards, isEmpty);
+      expect(controller.coinRewards, hasLength(1));
+      expect(session.profile.balance, 60);
+      controller.finishCoinReward(controller.coinRewards.single);
       expect(session.profile.balance, 60);
       repo.fail = false;
       await controller.retrySave();
       await controller.retrySave();
       expect(session.profile.balance, 80);
-      expect(controller.coinRewards, hasLength(1));
-      controller.finishCoinReward(controller.coinRewards.single);
       expect(controller.coinRewards, isEmpty);
-      expect(session.profile.balance, 80);
       controller.dispose();
       await session.close();
     },

@@ -4,6 +4,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/google_link.dart';
 import '../../../core/theme/game_theme.dart';
 import '../../../core/widgets/garden.dart';
+import '../../../core/widgets/game_loading.dart';
 import '../data/api_progress_repository.dart';
 import 'game_controller.dart';
 
@@ -39,6 +40,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   bool busy = false;
+  String? loadingMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -50,30 +52,35 @@ class _AccountScreenState extends State<AccountScreen> {
             .session
             .googleOperation?['started'] ==
         true;
-    return PopScope(
-      canPop: !busy && !started,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Minha conta'),
-          automaticallyImplyLeading: !busy && !started,
-        ),
-        body: Garden(
-          quiet: true,
-          child: SafeArea(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    PlayerAccountCard(
-                      controller: widget.controller,
-                      startGoogle: widget.startGoogle,
-                      onBusyChanged: (value) => setState(() => busy = value),
-                      onSessionChanged: () => Navigator.pop(context, true),
-                    ),
-                  ],
+    return GameLoadingOverlay(
+      message: loadingMessage,
+      child: PopScope(
+        canPop: !busy && !started,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Minha conta'),
+            automaticallyImplyLeading: !busy && !started,
+          ),
+          body: Garden(
+            quiet: true,
+            child: SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      PlayerAccountCard(
+                        controller: widget.controller,
+                        startGoogle: widget.startGoogle,
+                        onBusyChanged: (value) => setState(() => busy = value),
+                        onLoadingChanged: (value) =>
+                            setState(() => loadingMessage = value),
+                        onSessionChanged: () => Navigator.pop(context, true),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -91,12 +98,16 @@ class PlayerAccountCard extends StatefulWidget {
     required this.onSessionChanged,
     required this.onBusyChanged,
     this.startGoogle = false,
+    this.onLoadingChanged,
+    this.googleIdentityProvider,
   });
 
   final GameController controller;
   final VoidCallback onSessionChanged;
   final ValueChanged<bool> onBusyChanged;
   final bool startGoogle;
+  final ValueChanged<String?>? onLoadingChanged;
+  final GoogleIdentityProvider? googleIdentityProvider;
 
   @override
   State<PlayerAccountCard> createState() => _PlayerAccountCardState();
@@ -107,10 +118,16 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
   ApiProgressRepository get repo => controller.coordinator!.online!;
   late final google = GoogleLink(
     repo.session,
-    GoogleSdkIdentityProvider(repo.session.api.config.googleClientId),
+    widget.googleIdentityProvider ??
+        GoogleSdkIdentityProvider(repo.session.api.config.googleClientId),
   );
   bool busy = false;
   String? notice;
+
+  void _loading(String? message) {
+    if (mounted) widget.onLoadingChanged?.call(message);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -136,6 +153,7 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
       controller.refresh();
     }
     if (mounted) {
+      _loading(null);
       setState(() {
         busy = false;
         notice = message;
@@ -184,6 +202,7 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
   }
 
   Future<void> _google({bool recover = false}) async {
+    if (busy || controller.busy) return;
     if (controller.coordinator!.hasFailedCommand) {
       setState(
         () => notice =
@@ -192,8 +211,12 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
       return;
     }
     final changed = await _work(() async {
-      final lookup = await google.consult();
+      _loading('Conectando com Google…');
+      final lookup = await google.consult(
+        onIdentitySelected: () => _loading('Carregando seu progresso…'),
+      );
       if (!mounted) return false;
+      _loading(null);
       final conflict = lookup['escolhaNecessaria'] == true;
       final keep = await showDialog<String>(
         context: context,
@@ -251,6 +274,7 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
         await repo.session.clearGoogle();
         return false;
       }
+      _loading('Carregando seu progresso…');
       await google.confirm(keep);
       return true;
     });
@@ -259,6 +283,7 @@ class _PlayerAccountCardState extends State<PlayerAccountCard> {
 
   Future<void> _resume() async {
     final changed = await _work(() async {
+      _loading('Carregando seu progresso…');
       try {
         await google.resume();
       } on ApiFailure catch (e) {
@@ -409,7 +434,11 @@ class _EditPlayerNameDialog extends StatefulWidget {
 
 class _EditPlayerNameDialogState extends State<_EditPlayerNameDialog> {
   final form = GlobalKey<FormState>();
-  late final name = TextEditingController(text: widget.initialName);
+  late final name = TextEditingController(text: widget.initialName)
+    ..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: widget.initialName.length,
+    );
   bool saving = false;
   String? error;
 
@@ -459,7 +488,8 @@ class _EditPlayerNameDialogState extends State<_EditPlayerNameDialog> {
               textInputAction: TextInputAction.done,
               decoration: const InputDecoration(
                 labelText: 'Nome do jogador',
-                helperText: 'De 2 a 30 caracteres.',
+                helperText: 'Nome único no jogo, de 2 a 30 caracteres.',
+                helperMaxLines: 2,
               ),
               validator: (value) {
                 final text = (value ?? '').trim();

@@ -35,7 +35,10 @@ class HomeWordGarden extends StatelessWidget {
                       theme.isBees ||
                       theme.isMagic ||
                       theme.isSnow;
-                  final diameter = math.min(66.0, width * .18);
+                  final diameter = math.min(
+                    math.min(66.0, width * .18),
+                    height * .32,
+                  );
                   final centers = [
                     Offset(width * .20, height * .39),
                     Offset(width * .47, height * .17),

@@ -112,6 +112,7 @@ class ApiFailure implements Exception {
       'Muitas tentativas. Aguarde um minuto para tentar novamente.',
     'CONFIGURATION_ERROR' => 'Confira a configuração de conexão do aplicativo.',
     'VALIDATION_ERROR' => 'Confira os dados informados e tente novamente.',
+    'PLAYER_NAME_TAKEN' => 'Esse nome de jogador já existe. Tente outro.',
     'SHOP_UNAVAILABLE' => 'A loja ainda não está disponível.',
     _ =>
       status == 503

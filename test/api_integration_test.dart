@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -9,6 +10,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:caca_palavra/core/api/api_client.dart';
 import 'package:caca_palavra/core/api/auth_session.dart';
 import 'package:caca_palavra/core/api/google_link.dart';
+import 'package:caca_palavra/core/widgets/game_loading.dart';
+import 'package:caca_palavra/core/theme/game_theme.dart';
+import 'package:caca_palavra/core/theme/visual_theme_catalog.dart';
+import 'package:caca_palavra/features/game/presentation/account_screen.dart';
 import 'package:caca_palavra/features/game/application/game_session_coordinator.dart';
 import 'package:caca_palavra/features/game/application/theme_unlocks.dart';
 import 'package:caca_palavra/features/game/data/api_progress_repository.dart';
@@ -251,6 +256,7 @@ void main() {
   late Database db;
   late ApiProgressRepository repo;
   late GameSessionCoordinator game;
+  Future<http.Response?> Function(http.Request)? intercept;
   var clock = DateTime.utc(2026, 10, 30, 12);
   Future<void> openGame() async {
     repo = ApiProgressRepository(db, auth);
@@ -279,6 +285,7 @@ void main() {
   setUp(() async {
     data = loadData();
     backend = Backend(data);
+    intercept = null;
     store = MemoryCredentials();
     clock = DateTime.utc(2026, 10, 30, 12);
     api = ApiClient(
@@ -286,7 +293,10 @@ void main() {
         authUrl: Uri.parse('http://auth.test'),
         gameUrl: Uri.parse('http://game.test'),
       ),
-      client: MockClient(backend.handle),
+      client: MockClient(
+        (request) async =>
+            await intercept?.call(request) ?? await backend.handle(request),
+      ),
     );
     auth = AuthSession(api, store, now: () => clock);
     await auth.restore();
@@ -301,6 +311,163 @@ void main() {
     await db.close();
     api.close();
   });
+
+  test(
+    'profile and theme refreshes start together after initialization',
+    () async {
+      final gate = Completer<void>(), allStarted = Completer<void>();
+      final started = <String>{};
+      final paths = {'/api/v1/game/me', '/api/v1/temas', '/api/v1/temas/me'};
+      intercept = (request) async {
+        if (paths.contains(request.url.path)) {
+          started.add(request.url.path);
+          if (started.length == paths.length) allStarted.complete();
+          await gate.future;
+        }
+        return null;
+      };
+      final refresh = repo.synchronize(data);
+      try {
+        await allStarted.future.timeout(const Duration(seconds: 2));
+      } finally {
+        gate.complete();
+        await refresh;
+      }
+      expect(started, paths);
+    },
+  );
+
+  for (final loseResponse in [false, true]) {
+    test(
+      'online completion ${loseResponse ? 'recovers a lost response once' : 'unlocks as soon as the server confirms'}',
+      () async {
+        await game.startOrContinue();
+        for (final target in game.engine.state.level.words.take(
+          game.engine.state.level.words.length - 1,
+        )) {
+          await word(target.key);
+        }
+        final gate = Completer<void>(), sending = Completer<void>();
+        intercept = (request) async {
+          if (request.url.path.endsWith('/conclusao')) {
+            if (!sending.isCompleted) sending.complete();
+            await gate.future;
+          }
+          return null;
+        };
+        backend.lostCompletion = loseResponse;
+        final controller = GameController(game.engine, coordinator: game);
+        addTearDown(controller.dispose);
+        final balance = controller.balance;
+        final task = controller.buySuperHint('finish-with-super', game.context);
+        await sending.future.timeout(const Duration(seconds: 2));
+        expect(controller.completionSaving, true);
+        expect(controller.showingCompletion, true);
+        expect(controller.canAdvance, false);
+        expect(controller.coinRewards.single.amount, 20);
+        controller.finishCoinReward(controller.coinRewards.single);
+        expect(controller.balance, balance);
+        expect(game.profile.completed, isEmpty);
+        gate.complete();
+        await task.timeout(const Duration(seconds: 1));
+        if (loseResponse) {
+          expect(controller.completionSaving, false);
+          expect(controller.showingCompletion, true);
+          expect(controller.canAdvance, false);
+          expect(game.hasFailedCommand, true);
+          expect(game.profile.completed, isEmpty);
+          await controller.retrySave();
+        }
+        expect(controller.state.phase.name, 'completed');
+        expect(controller.completionSaving, false);
+        expect(controller.canAdvance, true);
+        expect(controller.coinRewards, isEmpty);
+        expect(controller.balance, balance - 120 + 20);
+        expect(backend.hints, 1);
+        expect(backend.completions, 1);
+      },
+    );
+  }
+
+  for (final cancel in [false, true]) {
+    testWidgets(
+      'Google loading allows account selection and ${cancel ? 'cancellation' : 'confirms the selected account'}',
+      (tester) async {
+        final lookup = Completer<http.Response>(),
+            confirm = Completer<http.Response>();
+        var confirms = 0, changed = 0;
+        intercept = (request) async {
+          if (request.url.path.endsWith('/consultar')) return lookup.future;
+          if (request.url.path.endsWith('/confirmar')) {
+            confirms++;
+            expect((jsonDecode(request.body) as Map)['manter'], 'GOOGLE');
+            return confirm.future;
+          }
+          return null;
+        };
+        final controller = GameController(game.engine, coordinator: game);
+        addTearDown(controller.dispose);
+        String? loading;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StatefulBuilder(
+              builder: (context, setState) => GameLoadingOverlay(
+                message: loading,
+                child: Scaffold(
+                  body: PlayerAccountCard(
+                    controller: controller,
+                    googleIdentityProvider: FixedGoogle(),
+                    onSessionChanged: () => changed++,
+                    onBusyChanged: (_) {},
+                    onLoadingChanged: (message) =>
+                        setState(() => loading = message),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('connect-google-account')));
+        await tester.pump();
+        expect(find.text('Carregando seu progresso…'), findsOneWidget);
+        expect(changed, 0);
+        lookup.complete(
+          backend.json({
+            'codigoOperacao': 'google-operation',
+            'expiraEm': '2026-10-30T13:00:00Z',
+            'escolhaNecessaria': true,
+            'jaVinculado': false,
+            'usuarioAtual': {'nomeUsuario': 'Atual', 'estadoJogo': null},
+            'usuarioExistente': {'nomeUsuario': 'Google', 'estadoJogo': null},
+          }),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 350));
+        expect(find.text('Carregando seu progresso…'), findsNothing);
+        expect(find.text('Qual conta deseja manter?'), findsOneWidget);
+        await tester.tap(
+          find.text(cancel ? 'Cancelar' : 'Manter conta Google'),
+        );
+        await tester.pump();
+        if (cancel) {
+          await tester.pumpAndSettle();
+          expect(confirms, 0);
+          expect(changed, 0);
+        } else {
+          expect(find.text('Carregando seu progresso…'), findsOneWidget);
+          expect(changed, 0);
+          confirm.complete(backend.json(backend.tokens()));
+          await tester.pumpAndSettle();
+          expect(changed, 1);
+          expect(confirms, 1);
+        }
+        expect(auth.googleOperation, isNull);
+        expect(controller.balance, 300);
+        expect(find.text('Carregando seu progresso…'), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 
   test(
     'anonymous is persisted and concurrent expired requests share one refresh',
@@ -662,6 +829,145 @@ void main() {
       expect(find.text('Moedas insuficientes'), findsOneWidget);
       await tester.tap(find.text('Agora não'));
       await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'phone home keeps every action visible without scrolling across viewport sizes',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      repo.state = {...repo.state, 'nomeUsuario': List.filled(30, 'W').join()};
+      game.profile = game.profile.copyWith(
+        balance: 123456789,
+        currentLevelId: 2500,
+        completed: {1},
+        hasStarted: true,
+      );
+      final controller = GameController(game.engine, coordinator: game);
+      addTearDown(controller.dispose);
+      for (final size in const [
+        Size(320, 568),
+        Size(360, 640),
+        Size(360, 800),
+        Size(393, 851),
+        Size(412, 915),
+        Size(432, 960),
+      ]) {
+        tester.view.physicalSize = size;
+        for (final scale in [1.0, 1.15, 1.3]) {
+          for (final theme in [
+            VisualTheme.garden,
+            VisualTheme.lagoon,
+            VisualTheme.library,
+            VisualTheme.magic,
+          ]) {
+            await tester.pumpWidget(
+              MaterialApp(
+                theme: GameTheme.theme,
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    padding: const EdgeInsets.only(top: 28, bottom: 24),
+                    textScaler: TextScaler.linear(scale),
+                  ),
+                  child: VisualThemeScope(theme: theme, child: child!),
+                ),
+                home: HomeScreen(
+                  controller: controller,
+                  onPlay: () {},
+                  onDaily: () {},
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              tester.takeException(),
+              isNull,
+              reason: '$size / $scale / ${theme.id}',
+            );
+            expect(
+              find.byKey(const ValueKey('home-fitted-layout')),
+              findsOneWidget,
+            );
+            expect(find.byType(Scrollable), findsNothing);
+            for (final key in [
+              'settings',
+              'home-progress',
+              'play',
+              'daily-play',
+              'home-themes',
+            ]) {
+              final bounds = tester.getRect(find.byKey(ValueKey(key)));
+              expect(bounds.top, greaterThanOrEqualTo(28), reason: key);
+              expect(
+                bounds.bottom,
+                lessThanOrEqualTo(size.height - 24),
+                reason: key,
+              );
+              expect(bounds.height, greaterThanOrEqualTo(48), reason: key);
+            }
+          }
+        }
+      }
+      tester.view.physicalSize = const Size(320, 568);
+      repo.state = {
+        ...repo.state,
+        'diario': {...repo.state['diario'] as Map, 'concluido': true},
+      };
+      controller.busy = true;
+      controller.refresh();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      expect(find.byType(Scrollable), findsNothing);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('home-themes'))).bottom,
+        lessThanOrEqualTo(544),
+      );
+      controller.busy = false;
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'taken player name stays editable and an available name can be saved',
+    (tester) async {
+      final controller = GameController(game.engine, coordinator: game);
+      addTearDown(controller.dispose);
+      intercept = (request) async {
+        if (request.method == 'PATCH' &&
+            request.url.path.endsWith('/me/nome') &&
+            (jsonDecode(request.body) as Map)['nomeUsuario'] == 'Ocupado') {
+          return backend.error('PLAYER_NAME_TAKEN');
+        }
+        return null;
+      };
+      await tester.pumpWidget(
+        MaterialApp(home: SettingsScreen(controller: controller)),
+      );
+      await tester.tap(find.byKey(const ValueKey('edit-player-name')));
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('player-name-field'));
+      await tester.enterText(field, 'Ocupado');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Esse nome de jogador já existe. Tente outro.'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.widget<TextFormField>(field).controller!.text, 'Ocupado');
+      expect(repo.name, 'Jogador teste');
+      expect(game.hasFailedCommand, false);
+      await tester.enterText(field, 'Nome disponível');
+      await tester.tap(find.text('Salvar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(repo.name, 'Nome disponível');
+      expect(find.text('Nome atualizado.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
     },
   );
 

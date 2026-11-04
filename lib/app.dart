@@ -5,6 +5,7 @@ import 'core/api/auth_session.dart';
 import 'core/api/google_link.dart';
 import 'core/api/connection_monitor.dart';
 import 'core/widgets/connection_gate.dart';
+import 'core/widgets/game_loading.dart';
 import 'core/preferences/player_preferences.dart';
 import 'core/feedback/game_feedback.dart';
 import 'core/theme/visual_theme_catalog.dart';
@@ -135,18 +136,22 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   GameController? _loaded;
   bool _playing = false;
   bool _recoverGoogle = false;
+  bool _loadingAccount = false;
 
   Future<void> _reloadAccount() async {
     final previous = _loaded;
-    await previous?.waitIdle();
-    await previous?.preferences.flush();
-    previous?.dispose();
-    await previous?.coordinator?.close();
-    _loaded = null;
     if (mounted) {
       setState(() {
+        _loaded = null;
         _playing = false;
-        _loading = _load();
+        _loadingAccount = true;
+        _loading = () async {
+          await previous?.waitIdle();
+          await previous?.preferences.flush();
+          previous?.dispose();
+          await previous?.coordinator?.close();
+          return _load();
+        }();
       });
     }
   }
@@ -273,6 +278,9 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     home: FutureBuilder<GameController>(
       future: _loading,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return GameLoadingScreen(account: _loadingAccount);
+        }
         if (snapshot.hasError) {
           final error = snapshot.error;
           if (error is ApiFailure && error.connectionFailure) {
@@ -349,6 +357,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
                               if (ok != true || !mounted) return;
                               setState(() {
                                 _recoverGoogle = true;
+                                _loadingAccount = true;
                                 _loading = () async {
                                   await defaultSession.createRecoveryIdentity();
                                   return _load();
@@ -363,11 +372,6 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
                 ),
               ),
             ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
           );
         }
         final controller = snapshot.requireData;

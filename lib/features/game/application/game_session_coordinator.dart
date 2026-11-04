@@ -642,6 +642,7 @@ class GameSessionCoordinator {
     List<String> ids, {
     required int session,
     RoundContext? expected,
+    void Function(GameState)? onCompletionSaving,
   }) {
     final ctx = expected ?? context;
     return _serial(() async {
@@ -662,6 +663,7 @@ class GameSessionCoordinator {
       var coins = <CoinOperation>[];
       var id = operationId('word');
       if (result.completed) {
+        onCompletionSaving?.call(candidate.state);
         final outcome = _completion(proposed, ctx);
         proposed = outcome.$1;
         coins = outcome.$2;
@@ -855,6 +857,7 @@ class GameSessionCoordinator {
     String? operationId,
     String? roundId,
     RoundContext? expected,
+    void Function(GameState)? onCompletionSaving,
   }) {
     final ctx = expected ?? context, id = operationId ?? createHintId();
     return _serial(() async {
@@ -909,7 +912,8 @@ class GameSessionCoordinator {
           roundId: ctx.roundId,
         ),
       ];
-      if (result?.completed == true) {
+      if (result != null && result.completed) {
+        onCompletionSaving?.call(candidate.state);
         final outcome = _completion(proposed, ctx);
         proposed = outcome.$1;
         coins.addAll(outcome.$2);
@@ -941,6 +945,7 @@ class GameSessionCoordinator {
   Future<SuperHintOutcome> purchaseSuperHint({
     String? operationId,
     RoundContext? expected,
+    void Function(GameState)? onCompletionSaving,
   }) {
     final ctx = expected ?? context, id = operationId ?? createHintId();
     return _serial(() async {
@@ -987,6 +992,7 @@ class GameSessionCoordinator {
         ),
       ];
       if (result.completed) {
+        onCompletionSaving?.call(candidate.state);
         final outcome = _completion(proposed, ctx);
         proposed = outcome.$1;
         coins.addAll(outcome.$2);

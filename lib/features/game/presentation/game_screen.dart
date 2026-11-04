@@ -269,6 +269,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     builder: (context, _) => PopScope<void>(
       canPop: controller.coordinator == null && !controller.dragging,
       onPopInvokedWithResult: (didPop, _) {
+        if (controller.completionSaving) return;
         if (!didPop) {
           if (controller.mascotOpen) {
             controller.closeMascot();
@@ -289,7 +290,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               immersive: true,
               showCornerMascot:
                   controller.coordinator == null ||
-                  controller.state.phase == RoundPhase.completed,
+                  controller.showingCompletion,
               child: SafeArea(
                 child: controller.dailyInvalid
                     ? Center(
@@ -331,7 +332,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           ),
                         ),
                       )
-                    : controller.state.phase == RoundPhase.completed
+                    : controller.showingCompletion
                     ? _Completion(
                         controller: controller,
                         walletKey: _walletKey,
@@ -740,7 +741,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 walletKey: _walletKey,
               ),
             ),
-            if (controller.state.phase == RoundPhase.completed)
+            if (controller.showingCompletion && !controller.dailyInvalid)
               Positioned.fill(
                 child: VictoryConfetti(
                   key: ValueKey(
@@ -749,7 +750,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   celebrate: controller.freshVictory,
                 ),
               ),
-            if (controller.state.phase != RoundPhase.completed)
+            if (!controller.showingCompletion)
               Positioned.fill(
                 child: ExtraCollectionLayer(
                   controller: controller,
@@ -1081,8 +1082,9 @@ class _Completion extends StatelessWidget {
   final GameController controller;
   @override
   Widget build(BuildContext context) {
-    final state = controller.state;
+    final state = controller.completionState;
     final last = controller.isDaily || controller.lastLevel;
+    final saving = controller.completionSaving;
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: ConstrainedBox(
@@ -1101,7 +1103,8 @@ class _Completion extends StatelessWidget {
                         child: WalletBadge(
                           key: walletKey,
                           balance: controller.balance,
-                          onPressed: controller.shopAvailable
+                          onPressed:
+                              controller.shopAvailable && controller.canAdvance
                               ? () => openShop(context, controller)
                               : null,
                         ),
@@ -1180,13 +1183,49 @@ class _Completion extends StatelessWidget {
                       const SizedBox(height: 16),
                       Text(
                         key: rewardSourceKey,
-                        controller.coordinator!.freshCompletion
+                        controller.newCompletion
                             ? '+${controller.completionReward} moedas!'
                             : 'Recompensa de ${controller.completionReward} moedas já recebida',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      SaveStatus(controller: controller),
+                      Visibility(
+                        visible: saving,
+                        maintainState: true,
+                        maintainAnimation: true,
+                        maintainSize: true,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Semantics(
+                            liveRegion: saving,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (saving &&
+                                    !MediaQuery.disableAnimationsOf(context))
+                                  const SizedBox.square(
+                                    dimension: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                else
+                                  const Icon(Icons.sync_rounded, size: 14),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'Salvando progresso…',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (!saving) SaveStatus(controller: controller),
                     ],
                     if (last && !controller.isDaily) ...[
                       const SizedBox(height: 20),
@@ -1200,10 +1239,9 @@ class _Completion extends StatelessWidget {
                       width: double.infinity,
                       child: VolumeButton(
                         key: const ValueKey('next-level'),
-                        onPressed:
-                            controller.busy || controller.saveError != null
-                            ? null
-                            : controller.nextLevel,
+                        onPressed: controller.canAdvance
+                            ? controller.nextLevel
+                            : null,
                         child: Text(
                           last ? 'Voltar ao início' : 'Próximo nível',
                           textAlign: TextAlign.center,

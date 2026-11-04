@@ -174,30 +174,30 @@ class GameController extends ChangeNotifier {
   final Set<String> _seenCoinRewards = {};
   List<CoinReward> get coinRewards => List.unmodifiable(_coinRewards);
 
-  void _collectCoinRewards(CampaignProfile before, CampaignProfile after) {
-    void add(String id, int amount, CoinRewardOrigin origin) {
-      if (!_seenCoinRewards.add(id) ||
-          _disposed ||
-          !effects.active ||
-          settingsOpen ||
-          themesOpen ||
-          shopOpen) {
-        return;
-      }
-      _coinRewards.add(CoinReward(id: id, amount: amount, origin: origin));
+  void _queueCoinReward(String id, int amount, CoinRewardOrigin origin) {
+    if (!_seenCoinRewards.add(id) ||
+        _disposed ||
+        !effects.active ||
+        settingsOpen ||
+        themesOpen ||
+        shopOpen) {
+      return;
     }
+    _coinRewards.add(CoinReward(id: id, amount: amount, origin: origin));
+  }
 
+  void _collectCoinRewards(CampaignProfile before, CampaignProfile after) {
     for (final level in after.explorerRewardedLevels.difference(
       before.explorerRewardedLevels,
     )) {
-      add(
+      _queueCoinReward(
         'explorer-reward:$level',
         Economy.explorerReward,
         CoinRewardOrigin.explorer,
       );
     }
     for (final level in after.completed.difference(before.completed)) {
-      add(
+      _queueCoinReward(
         'level-completion:$level',
         Economy.levelReward,
         CoinRewardOrigin.completion,
@@ -205,7 +205,7 @@ class GameController extends ChangeNotifier {
     }
     for (final entry in after.daily.entries) {
       if (entry.value.completed && before.daily[entry.key]?.completed != true) {
-        add(
+        _queueCoinReward(
           'daily-completion:${entry.key}',
           Economy.dailyReward,
           CoinRewardOrigin.completion,
@@ -250,6 +250,39 @@ class GameController extends ChangeNotifier {
   ThemeUnlockRule themeRule(String id) =>
       coordinator?.themeRule(id) ?? ThemeUnlocks.rule(id);
   bool busy = false;
+  GameState? _pendingVictory;
+  bool get completionSaving => _pendingVictory != null && busy;
+  bool get showingCompletion =>
+      _pendingVictory != null || state.phase == RoundPhase.completed;
+  bool get newCompletion =>
+      _pendingVictory != null || coordinator?.freshCompletion == true;
+  GameState get completionState => _pendingVictory ?? state;
+  bool get canAdvance =>
+      state.phase == RoundPhase.completed &&
+      _pendingVictory == null &&
+      !busy &&
+      !connectionBlocked &&
+      saveError == null;
+
+  void _savingCompletion(GameState victory) {
+    if (_disposed || _pendingVictory != null) return;
+    _pendingVictory = victory;
+    closeMascot(notify: false);
+    clearCollectionEffects(notify: false);
+    freshVictory = effects.active && !settingsOpen && !shopOpen && !themesOpen;
+    victorySerial++;
+    effects.emit(FeedbackCue.victory, id: 'victory:$_effectRound');
+    final round = coordinator!.context!;
+    _queueCoinReward(
+      isDaily
+          ? 'daily-completion:${round.date}'
+          : 'level-completion:${round.levelId}',
+      completionReward,
+      CoinRewardOrigin.completion,
+    );
+    refresh();
+  }
+
   String? saveError;
   ApiFailure? lastApiFailure;
   bool connectionBlocked = false;
@@ -377,8 +410,11 @@ class GameController extends ChangeNotifier {
         final result = await coordinator!.purchaseSuperHint(
           operationId: id,
           expected: expected,
+          onCompletionSaving: _savingCompletion,
         );
-        if (result.submission != null) _accept(result.submission!);
+        if (result.submission != null) {
+          _accept(result.submission!);
+        }
         return result;
       });
   Future<Map<String, dynamic>?> credit(
@@ -447,6 +483,14 @@ class GameController extends ChangeNotifier {
       return null;
     } finally {
       busy = false;
+      if (_pendingVictory != null && coordinator?.hasFailedCommand != true) {
+        _pendingVictory = null;
+        if (state.phase != RoundPhase.completed) {
+          _coinRewards.removeWhere(
+            (reward) => reward.origin == CoinRewardOrigin.completion,
+          );
+        }
+      }
       done.complete();
       _active = null;
       refresh();
@@ -491,6 +535,7 @@ class GameController extends ChangeNotifier {
     final result = await coordinator!.purchaseHint(
       operationId: id,
       expected: expected,
+      onCompletionSaving: _savingCompletion,
     );
     paidReveal = effects.active ? result.reveal : null;
     if (result.submission != null) {
@@ -597,7 +642,13 @@ class GameController extends ChangeNotifier {
       final session = state.session;
       unawaited(
         run(() async {
-          _accept(await coordinator!.submitWord(ids, session: session));
+          _accept(
+            await coordinator!.submitWord(
+              ids,
+              session: session,
+              onCompletionSaving: _savingCompletion,
+            ),
+          );
         }),
       );
       return;
@@ -643,10 +694,11 @@ class GameController extends ChangeNotifier {
             SubmissionKind.tooShort => FeedbackCue.invalid,
             _ => null,
           };
-    if (cue != null) {
+    final alreadyCelebrating = result.completed && _pendingVictory != null;
+    if (cue != null && !alreadyCelebrating) {
       effects.emit(cue, id: cue == FeedbackCue.invalid ? null : eventId);
     }
-    if (result.completed) {
+    if (result.completed && !alreadyCelebrating) {
       freshVictory = present;
       victorySerial++;
     }
@@ -664,12 +716,18 @@ class GameController extends ChangeNotifier {
     if (result.completed) {
       final session = state.session;
       _completionTimer?.cancel();
-      _completionTimer = Timer(GameTiming.completion, () {
+      void finish() {
         if (engine.finishCompletion(session)) {
           clearCollectionEffects(notify: false);
           refresh();
         }
-      });
+      }
+
+      if (alreadyCelebrating || coordinator?.online != null) {
+        finish();
+      } else {
+        _completionTimer = Timer(GameTiming.completion, finish);
+      }
     }
     notifyListeners();
   }
@@ -740,8 +798,7 @@ class GameController extends ChangeNotifier {
   }
 
   void nextLevel() {
-    if (state.phase != RoundPhase.completed) return;
-    if (busy || saveError != null) return;
+    if (!canAdvance) return;
     if (coordinator != null) {
       unawaited(
         run(() async {
@@ -769,6 +826,7 @@ class GameController extends ChangeNotifier {
     if (_disposed) return;
     closeMascot(notify: false);
     _cancelTimers();
+    _pendingVictory = null;
     freshVictory = false;
     gesture.cancel();
     _geometry = null;
