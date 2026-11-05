@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/widgets/garden.dart';
 import '../application/game_session_coordinator.dart';
@@ -5,6 +7,7 @@ import '../application/shop_models.dart';
 import '../../../core/theme/game_theme.dart';
 import 'game_controller.dart';
 import 'home_screen.dart';
+import 'play_shop_screen.dart';
 import 'widgets/ad_free_plan_card.dart';
 
 Future<void> openShop(BuildContext context, GameController controller) async {
@@ -18,6 +21,8 @@ Future<void> openShop(BuildContext context, GameController controller) async {
     await controller.refreshCalendar();
     if (!context.mounted || controller.saveError != null) return;
     controller.creditMessage = null;
+    final playShop = controller.playShop;
+    if (playShop != null) unawaited(playShop.prepare());
     await showModalBottomSheet<void>(
       context: context,
       sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
@@ -29,7 +34,9 @@ Future<void> openShop(BuildContext context, GameController controller) async {
       enableDrag: false,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.95,
-        child: ShopScreen(controller: controller),
+        child: playShop == null
+            ? ShopScreen(controller: controller)
+            : PlayShopScreen(controller: controller, shop: playShop),
       ),
     );
     await controller.adFreePlan.flush();

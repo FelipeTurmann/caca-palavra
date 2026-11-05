@@ -17,7 +17,29 @@ Na versão 0.14.3+30, a tela inicial mostra a saudação “Olá, Nome!”, acim
 - Card Minha conta em destaque nas configurações, com edição de nome de 2 a 30 caracteres e ações de vínculo/recuperação Google. O histórico financeiro foi retirado da interface.
 - Obtenção de Google ID token, consulta/comparação das contas, confirmação e retomada.
 
-**Loja oculta:** sem atalhos no saldo, sem botão de plano AD e sem convite “Ir à loja” quando faltam moedas. A API de pacotes, compras de dinheiro, anúncios e suas simulações não são usadas pelo fluxo online. O plano informado pelo servidor é somente leitura. Os providers locais continuam disponíveis para fixtures/testes isolados.
+**Loja Android.** Os produtos são filtrados pelo catálogo da API e mostram o preço informado pelo Google Play. Moedas e o benefício sem anúncios vêm do servidor após validar a compra. Os providers de simulação são usados no modo local.
+
+### Configurar compras do Google Play no ambiente de teste
+
+1. Use a faixa de teste interno e a conta de teste de licença na Play Store. Cadastre os pacotes de moedas e o benefício permanente como produtos de compra única. Use uma opção de compra por produto e mantenha a compra de múltiplas unidades desativada.
+2. No Google Cloud, ative a **Google Play Developer API** e crie uma conta de serviço. Na Play Console, convide o e-mail da conta de serviço e conceda acesso a dados financeiros/pedidos e a gerenciamento de pedidos e assinaturas. Guarde o JSON da conta de serviço somente no servidor. [Configuração da API do Google](https://developers.google.com/android-publisher/getting_started)
+3. Ao iniciar a API, o Flyway aplica a migração V9. Ela vincula `coins_500` ao produto de mesmo ID no Google Play e retira `coins_100` do catálogo ativo. Para os próximos produtos, associe o ID cadastrado no Google Play ao pacote correspondente em `jogo.pacote.codigo_produto_loja`.
+
+4. No YAML local da API do jogo, configure o caminho da conta de serviço e habilite a integração. O Flyway cria a tabela de recibos com a migração V8 ao iniciar a API.
+
+   ```yaml
+   compras:
+     google-play:
+       habilitado: true
+       nome-pacote: br.com.conectepalavras.caca_palavra
+       credenciais: secrets/google-play-service-account.json
+   ```
+
+5. Abra **Loja** no Android com a conta testadora e selecione um produto. Confira a indicação de compra de teste no diálogo do Google Play. Após a aprovação, o servidor atualiza a carteira ou o benefício. Se perder a resposta, use **Verificar compras** ou reabra o app. Se a loja estiver indisponível, confira se a API está habilitada e se o ID do produto está cadastrado e ativo na Play Console.
+
+O Flutter envia somente o token da compra ao endpoint autenticado `POST /api/v1/compras/google-play/validar`. A API consulta o Google, confere o perfil associado, grava um recibo único e entrega o benefício na mesma transação. A confirmação ou o consumo no Google ocorre depois, com novas tentativas quando necessário. Um token de outro perfil não transfere o benefício. O servidor mantém o hash do token para identificar repetições.
+
+Use esta versão para validar compras de teste. A reconciliação automática de estornos e a exibição de anúncios automáticos ainda precisam ser integradas antes de abrir as vendas ao público.
 
 ## Conexão obrigatória — 0.15.0+32
 

@@ -1,6 +1,6 @@
 # Conecte palavras (0.15.1+33)
 
-Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha e desafio diário. O fluxo normal agora integra `auth-service` e `caca-palavra-cartoon-api`: identidade, carteira, conclusões e temas vêm do servidor; a rodada parcial fica no SQLite. A loja está oculta nesta etapa. O perfil local antigo não é importado: uma nova conta começa no nível 1 com 60 moedas.
+Aplicativo Flutter/Dart para Android, com palavras em português brasileiro, campanha e desafio diário. O fluxo normal agora integra `auth-service` e `caca-palavra-cartoon-api`: identidade, carteira, conclusões e temas vêm do servidor; a rodada parcial fica no SQLite. A loja Android usa o Google Play Billing quando habilitada pela API. O perfil local antigo não é importado: uma nova conta começa no nível 1 com 60 moedas.
 
 Veja [configuração e validação da integração](INTEGRACAO-APIS.md), incluindo encaminhamento de portas no Android e login Google. As descrições abaixo de migrações/entregas locais anteriores são histórico; as regras de sessão, confirmação financeira e recuperação do modo online estão nesse guia.
 

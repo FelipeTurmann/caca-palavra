@@ -14,6 +14,7 @@ import '../application/game_session_coordinator.dart';
 import '../application/daily_models.dart';
 import '../application/campaign_models.dart';
 import '../application/shop_models.dart';
+import '../application/play_shop.dart';
 import 'wheel_gesture.dart';
 
 abstract final class GameTiming {
@@ -93,6 +94,7 @@ class GameController extends ChangeNotifier {
     FeedbackOutput? feedbackOutput,
     FeedbackCoordinator? sharedEffects,
     this.ownsPreferences = true,
+    bool enablePlayBilling = false,
   }) : adFreePlan = adFreePlan ?? AdFreePlanController.memory(),
        preferences = preferences ?? PreferencesController.memory(),
        ownsEffects = sharedEffects == null {
@@ -102,10 +104,15 @@ class GameController extends ChangeNotifier {
           this.preferences,
           feedbackOutput ?? SilentFeedbackOutput(),
         );
+    final online = coordinator?.online;
+    playShop = enablePlayBilling && online != null
+        ? PlayShop(online, refreshCalendar)
+        : null;
   }
   final bool ownsPreferences, ownsEffects;
   final PreferencesController preferences;
   final AdFreePlanController adFreePlan;
+  late final PlayShop? playShop;
   late final FeedbackCoordinator effects;
   bool settingsOpen = false;
   bool themesOpen = false;
@@ -246,7 +253,8 @@ class GameController extends ChangeNotifier {
   final GameSessionCoordinator? coordinator;
   final VoidCallback? onHome;
   final Future<void> Function()? onSessionChanged;
-  bool get shopAvailable => coordinator?.shopAvailable ?? true;
+  bool get shopAvailable =>
+      playShop != null || (coordinator?.shopAvailable ?? true);
   ThemeUnlockRule themeRule(String id) =>
       coordinator?.themeRule(id) ?? ThemeUnlocks.rule(id);
   bool busy = false;
@@ -859,6 +867,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    playShop?.dispose();
     _calendarTimer?.cancel();
     _cancelTimers();
     gesture.cancel();

@@ -184,9 +184,14 @@ class ApiClient {
         /* Status still identifies non-JSON failures. */
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        if (response.statusCode >= 500) connection?.reportServiceFailure();
+        final code = json?['code'] as String? ?? 'HTTP_ERROR';
+        if (response.statusCode >= 500 &&
+            code != 'GOOGLE_PLAY_UNAVAILABLE' &&
+            code != 'PLAY_PURCHASES_DISABLED') {
+          connection?.reportServiceFailure();
+        }
         throw ApiFailure(
-          json?['code'] as String? ?? 'HTTP_ERROR',
+          code,
           status: response.statusCode,
           correlationId:
               json?['correlationId'] as String? ??

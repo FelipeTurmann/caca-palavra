@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/monetization/ad_free_plan.dart';
 import 'core/api/api_client.dart';
 import 'core/api/auth_session.dart';
@@ -121,6 +123,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     if (!mounted || _connection?.blocked == true) return;
     _loaded?.effects.resume();
     await _loaded?.refreshCalendar();
+    await _loaded?.playShop?.restore();
   }
 
   @override
@@ -174,6 +177,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     }
     final controller = GameController(
       session.engine,
+      enablePlayBilling: !kIsWeb && Platform.isAndroid,
       adFreePlan: await AdFreePlanController.load(
         repository is ApiProgressRepository
             ? RemoteAdFreePlanStore(() => repository.adFree)
@@ -196,6 +200,8 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
       setState(() => _loaded = controller);
       controller.setConnectionBlocked(_connection?.blocked == true);
       unawaited(controller.effects.prepare());
+      final playShop = controller.playShop;
+      if (playShop != null) unawaited(playShop.prepare());
       controller.scheduleCalendarCheck();
       if (_recoverGoogle) {
         _recoverGoogle = false;
