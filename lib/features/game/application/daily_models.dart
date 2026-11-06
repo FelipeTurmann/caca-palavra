@@ -64,13 +64,14 @@ class DailyProgress {
   bool get completed => round.status == 'completed';
   DailyProgress copyWith({
     RoundSnapshot? round,
+    Map<String, WordEntry>? lexicon,
     bool? pendingResult,
     bool? expired,
   }) => DailyProgress(
     date: date,
     catalogVersion: catalogVersion,
     definition: definition,
-    lexicon: lexicon,
+    lexicon: lexicon ?? this.lexicon,
     round: round ?? this.round,
     pendingResult: pendingResult ?? this.pendingResult,
     expired: expired ?? this.expired,

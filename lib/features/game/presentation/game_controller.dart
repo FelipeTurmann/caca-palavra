@@ -8,6 +8,7 @@ import '../../../core/preferences/player_preferences.dart';
 import '../../../core/theme/visual_theme_catalog.dart';
 import '../../../core/feedback/game_feedback.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import '../domain/game_engine.dart';
 import '../domain/round_snapshot.dart';
 import '../application/game_session_coordinator.dart';
@@ -122,6 +123,15 @@ class GameController extends ChangeNotifier {
   MascotHint? get mascotHint => mascotTargetKey == null
       ? null
       : coordinator?.mascotHintFor(mascotTargetKey!);
+  String? get mascotClue {
+    final hint = mascotHint;
+    if (hint == null) return null;
+    final current = coordinator?.clueWordFor(hint.targetKey);
+    if (current != null && current.clueVersion > hint.clueVersion) {
+      return current.clue ?? hint.clue;
+    }
+    return hint.clue;
+  }
 
   void closeMascot({bool notify = true}) {
     mascotOpen = false;
@@ -381,14 +391,17 @@ class GameController extends ChangeNotifier {
     if (delay > const Duration(minutes: 1)) delay = const Duration(minutes: 1);
     if (delay <= Duration.zero) delay = const Duration(milliseconds: 1);
     _calendarTimer = Timer(delay, () async {
-      await refreshCalendar();
+      final lifecycle = SchedulerBinding.instance.lifecycleState;
+      if (lifecycle == null || lifecycle == AppLifecycleState.resumed) {
+        await refreshCalendar();
+      }
       if (!_disposed) scheduleCalendarCheck();
     });
   }
 
   Future<void> refreshCalendar() async {
     await waitIdle();
-    if (_disposed || coordinator == null) return;
+    if (_disposed || connectionBlocked || coordinator == null) return;
     try {
       final previousRound = coordinator!.context?.identity;
       await coordinator!.refreshDaily();

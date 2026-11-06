@@ -39,7 +39,7 @@ Na versão 0.14.3+30, a tela inicial mostra a saudação “Olá, Nome!”, acim
 
 O Flutter envia somente o token da compra ao endpoint autenticado `POST /api/v1/compras/google-play/validar`. A API consulta o Google, confere o perfil associado, grava um recibo único e entrega o benefício na mesma transação. A confirmação ou o consumo no Google ocorre depois, com novas tentativas quando necessário. Um token de outro perfil não transfere o benefício. O servidor mantém o hash do token para identificar repetições.
 
-Use esta versão para validar compras de teste. A reconciliação automática de estornos e a exibição de anúncios automáticos ainda precisam ser integradas antes de abrir as vendas ao público.
+Use esta versão para validar compras de teste. A API do jogo consulta os estornos de moedas do Google Play e debita até o saldo disponível. A exibição de anúncios automáticos ainda precisa ser integrada antes de abrir as vendas ao público.
 
 ## Conexão obrigatória — 0.15.0+32
 

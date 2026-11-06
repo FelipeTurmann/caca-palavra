@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'core/monetization/ad_free_plan.dart';
 import 'core/api/api_client.dart';
@@ -49,9 +50,11 @@ Future<GameSessionCoordinator> loadGame() async {
     }
   }
   await auth.ensure();
-  final data = await GameData.load();
   final repository = await ApiProgressRepository.openOnline(auth);
   try {
+    final data = await GameData.load(
+      version: await repository.campaignVersion(),
+    );
     return await GameSessionCoordinator.create(
       data,
       repository,
@@ -82,27 +85,78 @@ class WordGameApp extends StatefulWidget {
 class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   late final ConnectionMonitor? _connection =
       widget.connection ?? (widget.loader == null ? defaultConnection : null);
+  Timer? _connectionRetry;
+  int _retrySeconds = 2;
+  ConnectionProblem? _previousConnectionProblem;
+
+  bool get _foreground => switch (WidgetsBinding.instance.lifecycleState) {
+    null || AppLifecycleState.resumed => true,
+    _ => false,
+  };
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _connection?.addListener(_connectionChanged);
-    if (_connection != null) unawaited(_connection.start());
+    if (_connection case final connection?) {
+      connection.addListener(_connectionChanged);
+      _connectionChanged();
+      unawaited(connection.start());
+    }
   }
 
   void _connectionChanged() {
-    if (mounted) _loaded?.setConnectionBlocked(_connection!.blocked);
+    final connection = _connection!;
+    final networkReturned =
+        _previousConnectionProblem == ConnectionProblem.offline &&
+        connection.problem == ConnectionProblem.serviceUnavailable;
+    _previousConnectionProblem = connection.problem;
+    _loaded?.setConnectionBlocked(connection.blocked);
+    if (!connection.blocked || networkReturned) {
+      _cancelConnectionRetry();
+      _retrySeconds = 2;
+    }
+    if (!_foreground || !connection.blocked || connection.checking) return;
+    _connectionRetry ??= Timer(
+      networkReturned ? Duration.zero : Duration(seconds: _retrySeconds),
+      () {
+        _connectionRetry = null;
+        _retrySeconds = math.min(_retrySeconds * 2, 30);
+        unawaited(_retryConnection());
+      },
+    );
+  }
+
+  void _cancelConnectionRetry() {
+    _connectionRetry?.cancel();
+    _connectionRetry = null;
   }
 
   Future<void> _retryConnection() async {
     final connection = _connection;
-    if (connection == null) return;
+    if (!mounted ||
+        !_foreground ||
+        connection == null ||
+        !connection.blocked ||
+        connection.checking) {
+      return;
+    }
+    _cancelConnectionRetry();
     await connection.retry(() async {
+      if (!mounted || !_foreground) return false;
       try {
         final controller = _loaded;
         if (controller == null) {
-          setState(() => _loading = _load());
-          await _loading;
+          try {
+            await _loading;
+          } on ApiFailure catch (error) {
+            if (!error.connectionFailure) rethrow;
+            if (!mounted || !_foreground) return false;
+            setState(() {
+              _loading = _load();
+            });
+            await _loading;
+          }
         } else {
           await controller.reconnect();
         }
@@ -119,11 +173,17 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   }
 
   Future<void> _resumeConnection() async {
-    await _connection?.refreshNetwork();
-    if (!mounted || _connection?.blocked == true) return;
+    if (_connection?.blocked != true) await _connection?.refreshNetwork();
+    if (!mounted || !_foreground) return;
+    if (_connection?.blocked == true) {
+      await _retryConnection();
+      return;
+    }
     _loaded?.effects.resume();
     await _loaded?.refreshCalendar();
-    await _loaded?.playShop?.restore();
+    if (mounted && _foreground && _connection?.blocked != true) {
+      await _loaded?.playShop?.restore();
+    }
   }
 
   @override
@@ -131,6 +191,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       unawaited(_resumeConnection());
     } else {
+      _cancelConnectionRetry();
       _loaded?.suspendPresentation();
     }
   }
@@ -160,6 +221,17 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   }
 
   Future<GameController> _load() async {
+    try {
+      return await _loadController();
+    } on ApiFailure catch (error) {
+      if (mounted && error.connectionFailure && _connection?.blocked == false) {
+        _connection!.reportServiceFailure();
+      }
+      rethrow;
+    }
+  }
+
+  Future<GameController> _loadController() async {
     await _connection?.start();
     if (_connection?.internetAvailable == false) {
       throw const ApiFailure('OFFLINE', requestNotSent: true);
@@ -233,6 +305,7 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _connection?.removeListener(_connectionChanged);
+    _cancelConnectionRetry();
     _loaded?.dispose();
     if (_loaded != null) {
       final controller = _loaded!;
@@ -294,7 +367,9 @@ class _WordGameAppState extends State<WordGameApp> with WidgetsBindingObserver {
               body: ConnectionNotice(
                 offline: error.code == 'OFFLINE',
                 checking: false,
-                onRetry: () => setState(() => _loading = _load()),
+                onRetry: () => setState(() {
+                  _loading = _load();
+                }),
               ),
             );
           }

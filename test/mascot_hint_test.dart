@@ -7,7 +7,9 @@ import 'package:caca_palavra/features/game/application/game_session_coordinator.
 import 'package:caca_palavra/features/game/data/daily_catalog.dart';
 import 'package:caca_palavra/features/game/data/game_data.dart';
 import 'package:caca_palavra/features/game/data/progress_repository.dart';
+import 'package:caca_palavra/features/game/domain/game_engine.dart';
 import 'package:caca_palavra/features/game/domain/word_normalizer.dart';
+import 'package:caca_palavra/features/game/presentation/game_controller.dart';
 import 'helpers.dart';
 
 void main() {
@@ -118,6 +120,27 @@ void main() {
     expect(c.activeRound!.mascotHints, hasLength(1));
     expect(await repo.database.query('coin_transactions'), hasLength(2));
   });
+
+  test(
+    'an already purchased clue displays its revision without another charge',
+    () async {
+      final original = await c.purchaseMascotHint('GATO', operationId: 'cat');
+      const revised = 'Felino doméstico que mia e costuma ronronar.';
+      data = GameData(data.levels, {
+        ...data.lexicon,
+        'GATO': WordEntry('GATO', clue: revised, clueVersion: 3),
+      }, catalogVersion: data.catalogVersion);
+      await reopen();
+      final controller = GameController(c.engine, coordinator: c);
+      addTearDown(controller.dispose);
+      controller.showMascotWord('GATO');
+
+      expect(controller.mascotClue, revised);
+      expect(c.mascotHintFor('GATO')!.toJson(), original.hint!.toJson());
+      expect(c.profile.balance, 70);
+      expect(await repo.database.query('coin_transactions'), hasLength(2));
+    },
+  );
 
   test(
     'receipt retry is free and rejects a different target or round',

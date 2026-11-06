@@ -2796,6 +2796,14 @@
       "referenceLemma": "COSTA"
     },
     {
+      "display": "COTA",
+      "clue": "Parte de um total reservada para alguém ou para um grupo.",
+      "partOfSpeech": "outra",
+      "familiarity": 1,
+      "source": "fserb-reviewed",
+      "referenceLemma": "COTA"
+    },
+    {
       "display": "COURO",
       "clue": "Material resistente feito a partir da pele de animais.",
       "partOfSpeech": "substantivo",
@@ -6562,6 +6570,14 @@
       "familiarity": 2,
       "source": "fserb-reviewed",
       "referenceLemma": "MIOLO"
+    },
+    {
+      "display": "MIRA",
+      "clue": "Dispositivo que ajuda a apontar com precisão para um alvo.",
+      "partOfSpeech": "outra",
+      "familiarity": 1,
+      "source": "fserb-reviewed",
+      "referenceLemma": "MIRA"
     },
     {
       "display": "MIRAR",

@@ -159,7 +159,10 @@ class ExtrasSheet extends StatelessWidget {
         child: ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
-            final state = controller.state;
+            final completed = controller.showingCompletion;
+            final state = completed
+                ? controller.completionState
+                : controller.state;
             final words = state.extras.values.toList().reversed.toList();
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -171,26 +174,28 @@ class ExtrasSheet extends StatelessWidget {
                         'Palavras extras',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      const SizedBox(height: 16),
-                      ExplorerProgress(state: state),
-                      if (!controller.isDaily &&
-                          (controller.explorerRewardGranted ||
-                              !state.explorerUnlocked)) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          controller.explorerRewardGranted
-                              ? '+${Economy.explorerReward} moedas recebidas pelo selo.'
-                              : 'Conquiste o selo e ganhe ${Economy.explorerReward} moedas neste nível.',
-                          style: const TextStyle(
-                            color: explorerGoldInk,
-                            fontWeight: FontWeight.w600,
+                      if (!completed) ...[
+                        const SizedBox(height: 16),
+                        ExplorerProgress(state: state),
+                        if (!controller.isDaily &&
+                            (controller.explorerRewardGranted ||
+                                !state.explorerUnlocked)) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            controller.explorerRewardGranted
+                                ? '+${Economy.explorerReward} moedas recebidas pelo selo.'
+                                : 'Conquiste o selo e ganhe ${Economy.explorerReward} moedas neste nível.',
+                            style: const TextStyle(
+                              color: explorerGoldInk,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
+                        ],
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Cada extra inédita revela um quadrado de uma resposta. Pelo menos uma letra de cada palavra permanece escondida para você formar a resposta.',
                         ),
                       ],
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Cada extra inédita revela um quadrado de uma resposta. Pelo menos uma letra de cada palavra permanece escondida para você formar a resposta.',
-                      ),
                       const SizedBox(height: 16),
                       if (state.explorerUnlocked) ...[
                         const ExplorerBadge(),
@@ -243,15 +248,28 @@ class ExtrasSheet extends StatelessWidget {
 }
 
 class ExtraDiscoveriesSummary extends StatelessWidget {
-  const ExtraDiscoveriesSummary({super.key, required this.state});
+  const ExtraDiscoveriesSummary({
+    super.key,
+    required this.state,
+    required this.compact,
+    required this.onShowExtras,
+  });
   final GameState state;
+  final bool compact;
+  final VoidCallback onShowExtras;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
     children: [
-      if (state.extras.isNotEmpty) ...[
-        const SizedBox(height: 20),
+      if (state.extras.length > (compact ? 1 : 3)) ...[
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: onShowExtras,
+          child: const Text('Ver palavras extras'),
+        ),
+      ] else if (state.extras.isNotEmpty) ...[
+        SizedBox(height: compact ? 8 : 20),
         Text(
           'Suas descobertas',
           textAlign: TextAlign.center,
@@ -278,7 +296,7 @@ class ExtraDiscoveriesSummary extends StatelessWidget {
         ),
       ],
       if (state.explorerUnlocked) ...[
-        const SizedBox(height: 20),
+        SizedBox(height: compact ? 8 : 20),
         const ExplorerBadge(),
       ],
     ],

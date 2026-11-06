@@ -20,6 +20,7 @@ import 'package:caca_palavra/features/game/data/api_progress_repository.dart';
 import 'package:caca_palavra/features/game/data/game_data.dart';
 import 'package:caca_palavra/features/game/data/progress_repository.dart';
 import 'package:caca_palavra/features/game/data/daily_catalog.dart';
+import 'package:caca_palavra/features/game/domain/game_engine.dart';
 import 'package:caca_palavra/features/game/presentation/game_controller.dart';
 import 'package:caca_palavra/features/game/presentation/game_screen.dart';
 import 'package:caca_palavra/features/game/presentation/home_screen.dart';
@@ -43,6 +44,7 @@ class FixedGoogle implements GoogleIdentityProvider {
 class Backend {
   Backend(this.data);
   final GameData data;
+  int? campaignVersion;
   String user = '00000000-0000-4000-8000-000000000001';
   String date = '2026-10-30';
   String name = 'Jogador teste';
@@ -84,7 +86,7 @@ class Backend {
       'proximoNivel': last >= data.levels.length ? null : last + 1,
       'totalNiveis': data.levels.length,
       'campanhaConcluida': last >= data.levels.length,
-      'versaoCatalogo': data.catalogVersion,
+      'versaoCatalogo': campaignVersion ?? data.catalogVersion,
     },
     'moedas': {'qtdMoedas': coins},
     'beneficios': {'semAnuncios': false},
@@ -750,6 +752,64 @@ void main() {
     await expectLater(game.watchRewardAd(), throwsA(isA<ApiFailure>()));
     expect(game.profile.balance, 300);
   });
+
+  test(
+    'campaign upgrade finishes the saved round before using new levels',
+    () async {
+      await game.startOrContinue();
+      await word('GATO');
+      await word('TOGA');
+      final oldRound = game.activeRound!;
+      final previous = data;
+      final upgraded = GameData(
+        [
+          for (final level in previous.levels)
+            LevelDefinition(
+              id: level.id,
+              difficulty: level.difficulty,
+              letters: level.letters.reversed.toList(),
+              words: level.words,
+              extraGoal: level.id == 1 ? 2 : level.extraGoal,
+            ),
+        ],
+        previous.lexicon,
+        catalogVersion: 3,
+        previous: previous,
+      );
+      backend.campaignVersion = 3;
+      final upgradedRepo = ApiProgressRepository(db, auth);
+      backend.requests.clear();
+      expect(await upgradedRepo.campaignVersion(), 3);
+      game = await GameSessionCoordinator.create(
+        upgraded,
+        upgradedRepo,
+        dailyCatalog: DailyCatalog.fixture(previous),
+      );
+      expect(
+        backend.requests.where(
+          (request) => request.url.path.endsWith('/inicializar'),
+        ),
+        hasLength(1),
+      );
+      expect(game.activeRound!.roundId, oldRound.roundId);
+      expect(game.activeRound!.fingerprint, oldRound.fingerprint);
+      expect(game.engine.state.targets, {'GATO'});
+      expect(game.engine.state.extras.keys, ['TOGA']);
+      expect(game.profile.balance, 300);
+
+      await finish();
+      final completion = backend.requests.singleWhere(
+        (request) => request.url.path.endsWith('/conclusao'),
+      );
+      expect(jsonDecode(completion.body), {
+        'versaoCatalogo': 3,
+        'explorador': true,
+      });
+      expect(await game.advance(), true);
+      expect(game.activeRound!.fingerprint, upgraded.levels[1].fingerprint);
+      expect(game.profile.balance, 330);
+    },
+  );
 
   test(
     'reconnection reads both services and preserves a partial round and identity',

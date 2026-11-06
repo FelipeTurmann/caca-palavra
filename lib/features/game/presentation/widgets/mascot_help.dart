@@ -166,9 +166,7 @@ class _MascotSpeech extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = controller.busy
         ? 'Liberando dica…'
-        : controller.mascotNotice ??
-              controller.mascotHint?.clue ??
-              mascotInvitation;
+        : controller.mascotNotice ?? controller.mascotClue ?? mascotInvitation;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: GameTheme.cream,

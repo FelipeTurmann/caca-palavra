@@ -277,7 +277,7 @@ void main() {
   });
 
   testWidgets(
-    'extras sheet and completion remain scrollable with large text on small screen',
+    'extras sheet scrolls and completion fits with large text on small screen',
     (tester) async {
       final c = await mount(tester, size: const Size(320, 568), textScale: 2);
       await tester.tap(find.byKey(const ValueKey('extras')));
@@ -292,7 +292,11 @@ void main() {
         await dragWord(tester, c, word.key);
       }
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.ensureVisible(find.byKey(const ValueKey('next-level')));
+      expect(find.byType(Scrollable), findsNothing);
+      expect(
+        find.byKey(const ValueKey('next-level')).hitTestable(),
+        findsOneWidget,
+      );
       expect(find.byType(ExplorerBadge), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

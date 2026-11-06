@@ -22,9 +22,14 @@ import 'helpers.dart';
 class ManualNetworkAccess implements NetworkAccessSource {
   ManualNetworkAccess(this.available);
   bool? available;
+  int checks = 0;
   final events = StreamController<bool?>.broadcast(sync: true);
   @override
-  Future<bool?> check() async => available;
+  Future<bool?> check() async {
+    checks++;
+    return available;
+  }
+
   @override
   Stream<bool?> get changes => events.stream;
   void change(bool? value) {
@@ -230,7 +235,7 @@ void main() {
   );
 
   test(
-    'reconnection verifies once and cannot unlock if the network drops during verification',
+    'reconnection verifies once and cannot unlock with a result from before a network drop',
     () async {
       final source = ManualNetworkAccess(false);
       final connection = ConnectionMonitor(source);
@@ -254,15 +259,18 @@ void main() {
       });
       expect(probes, 1);
       source.change(false);
+      source.change(true);
       pending.complete(true);
       await retry;
-      expect(connection.problem, ConnectionProblem.offline);
+      expect(connection.problem, ConnectionProblem.serviceUnavailable);
       expect(connection.checking, false);
+      await connection.retry(() async => true);
+      expect(connection.blocked, false);
     },
   );
 
   testWidgets(
-    'offline startup does not load an account and retry preserves the active round',
+    'manual startup retry and automatic recovery preserve the active round',
     (tester) async {
       final source = ManualNetworkAccess(false);
       final connection = ConnectionMonitor(source);
@@ -285,8 +293,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Sem conexão com a internet'), findsWidgets);
       expect(loads, 0);
-      source.change(true);
-      await tester.pumpAndSettle();
+      source.available = true;
       await tester.tap(find.byKey(const ValueKey('retry-connection')).last);
       await tester.pumpAndSettle();
       expect(loads, 1);
@@ -307,10 +314,20 @@ void main() {
       });
       source.change(true);
       await tester.pumpAndSettle();
+      expect(controller.interactive, true);
+      expect(game.activeRound!.roundId, round);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      source.change(false);
+      source.available = true;
+      final checks = source.checks;
+      await tester.pump(const Duration(seconds: 10));
+      expect(source.checks, checks);
       expect(controller.interactive, false);
-      await tester.tap(find.byKey(const ValueKey('retry-connection')));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(controller.interactive, true);
+      expect(source.checks, checks + 1);
       expect(game.activeRound!.roundId, round);
       expect(game.profile.balance, balance);
       expect(loads, 1);
@@ -319,4 +336,47 @@ void main() {
       await source.events.close();
     },
   );
+
+  testWidgets('service outage retries at increasing intervals until recovery', (
+    tester,
+  ) async {
+    final source = ManualNetworkAccess(true);
+    final connection = ConnectionMonitor(source);
+    final game = await GameSessionCoordinator.create(
+      loadData(),
+      MemoryProgressRepository(60),
+    );
+    var loads = 0;
+    await tester.pumpWidget(
+      WordGameApp(
+        connection: connection,
+        feedbackOutput: SilentFeedbackOutput(),
+        loader: () async {
+          if (++loads < 3) throw const ApiFailure('NETWORK_ERROR');
+          return game;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(loads, 1);
+    expect(connection.problem, ConnectionProblem.serviceUnavailable);
+    await tester.pump(const Duration(seconds: 1));
+    expect(loads, 1);
+    await tester.pump(const Duration(seconds: 1));
+    expect(loads, 2);
+    expect(connection.blocked, true);
+    await tester.pump(const Duration(seconds: 3));
+    expect(loads, 2);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(loads, 3);
+    expect(connection.blocked, false);
+    expect(find.text('Jogar'), findsOneWidget);
+    final checks = source.checks;
+    await tester.pump(const Duration(seconds: 30));
+    expect(source.checks, checks);
+    await tester.pumpWidget(const SizedBox());
+    connection.dispose();
+    await source.events.close();
+  });
 }

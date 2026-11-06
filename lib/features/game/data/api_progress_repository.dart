@@ -7,7 +7,6 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/auth_session.dart';
 import '../application/campaign_models.dart';
 import '../application/theme_unlocks.dart';
-import '../domain/game_engine.dart';
 import 'game_data.dart';
 import 'progress_repository.dart';
 
@@ -28,6 +27,7 @@ class ApiProgressRepository extends SqliteProgressRepository {
       scope = session.api.config.namespace;
   final AuthSession session;
   final String userId, scope;
+  Future<Map<String, dynamic>>? _initialState;
   Map<String, dynamic> state = {};
   Map<String, dynamic> identity = {};
   Map<String, Map<String, dynamic>> themes = {};
@@ -53,6 +53,18 @@ class ApiProgressRepository extends SqliteProgressRepository {
     return session.authorized(method, path, body: body);
   }
 
+  Future<Map<String, dynamic>> _initializePlayer() =>
+      _initialState ??= call('POST', '/api/v1/game/inicializar');
+
+  Future<int> campaignVersion() async {
+    final initial = await _initializePlayer();
+    final progress = initial['progresso'];
+    if (progress is Map && progress['versaoCatalogo'] is int) {
+      return progress['versaoCatalogo'] as int;
+    }
+    throw const ApiFailure('INVALID_RESPONSE');
+  }
+
   Future<void> _fetch(
     GameData data, {
     bool initialize = false,
@@ -61,10 +73,7 @@ class ApiProgressRepository extends SqliteProgressRepository {
     // Initialization must create the player before querying their themes.
     // Once initialized, these reads are independent and share one network wait.
     final responses = await Future.wait([
-      call(
-        initialize ? 'POST' : 'GET',
-        initialize ? '/api/v1/game/inicializar' : '/api/v1/game/me',
-      ),
+      initialize ? _initializePlayer() : call('GET', '/api/v1/game/me'),
       if (refreshThemes && !initialize) ...[
         call('GET', '/api/v1/temas'),
         call('GET', '/api/v1/temas/me'),
@@ -212,10 +221,7 @@ class ApiProgressRepository extends SqliteProgressRepository {
         : _merge(data, local);
     await _write(database, profile);
     for (final round in profile.rounds.values) {
-      GameEngine(
-        levels: data.levels,
-        lexicon: data.lexicon,
-      ).restoreRound(round);
+      data.createEngine(round: round).restoreRound(round);
     }
     return profile;
   }
@@ -360,10 +366,13 @@ class ApiProgressRepository extends SqliteProgressRepository {
       final snapshot = daily
           ? proposal.profile.daily[date]?.round
           : proposal.profile.rounds[level];
+      final roundData = daily || snapshot == null
+          ? data
+          : data.forRound(snapshot);
       final goal = daily
           ? 0
-          : data.levels.firstWhere((l) => l.id == level).extraGoal;
-      final receipt = await call(
+          : roundData.levels.firstWhere((l) => l.id == level).extraGoal;
+      Future<Map<String, dynamic>> sendCompletion(int version) => call(
         'POST',
         '$phasePath/conclusao',
         body: {
@@ -372,6 +381,17 @@ class ApiProgressRepository extends SqliteProgressRepository {
             'explorador': snapshot != null && snapshot.extras.length >= goal,
         },
       );
+      final savedVersion = daily ? version : proposal.profile.catalogVersion;
+      Map<String, dynamic> receipt;
+      try {
+        receipt = await sendCompletion(savedVersion);
+      } on ApiFailure catch (error) {
+        if (savedVersion == version ||
+            error.code != 'CATALOG_VERSION_MISMATCH') {
+          rethrow;
+        }
+        receipt = await sendCompletion(version);
+      }
       await _update(proposal.id, {
         'completion_receipt': canonicalJson(receipt),
         'state': 'completion_confirmed',

@@ -1,0 +1,131 @@
+{
+  "lexiconEntries": 11276,
+  "candidateRacks": 18061,
+  "candidateVariants": 81164,
+  "levels": 2500,
+  "distinctRacks": 1682,
+  "distinctTargets": 1036,
+  "restLevels": 500,
+  "bands": [
+    {
+      "from": 1,
+      "to": 100,
+      "name": "introducao",
+      "levels": 100,
+      "meanScore": 16.52
+    },
+    {
+      "from": 101,
+      "to": 500,
+      "name": "facil",
+      "levels": 400,
+      "meanScore": 27.2125
+    },
+    {
+      "from": 501,
+      "to": 1000,
+      "name": "intermediario",
+      "levels": 500,
+      "meanScore": 58.458
+    },
+    {
+      "from": 1001,
+      "to": 1750,
+      "name": "avancado",
+      "levels": 750,
+      "meanScore": 83.03733333333334
+    },
+    {
+      "from": 1751,
+      "to": 2500,
+      "name": "desafiador",
+      "levels": 750,
+      "meanScore": 89.76
+    }
+  ],
+  "mostFrequentTargets": [
+    [
+      "RIFA",
+      45
+    ],
+    [
+      "RETO",
+      45
+    ],
+    [
+      "ELO",
+      45
+    ],
+    [
+      "EMA",
+      45
+    ],
+    [
+      "CAL",
+      45
+    ],
+    [
+      "ORLA",
+      44
+    ],
+    [
+      "ALVA",
+      42
+    ],
+    [
+      "ALMA",
+      42
+    ],
+    [
+      "ORAR",
+      42
+    ],
+    [
+      "ARAR",
+      42
+    ],
+    [
+      "PAR",
+      41
+    ],
+    [
+      "ALVO",
+      41
+    ],
+    [
+      "RARO",
+      41
+    ],
+    [
+      "VIA",
+      41
+    ],
+    [
+      "ASA",
+      40
+    ],
+    [
+      "PROA",
+      40
+    ],
+    [
+      "ORAL",
+      40
+    ],
+    [
+      "IMA",
+      39
+    ],
+    [
+      "ARO",
+      39
+    ],
+    [
+      "SOAR",
+      39
+    ]
+  ],
+  "minimumTargetDistanceObserved": 6,
+  "maximumTargetUsesObserved": 45,
+  "maximumTargetUsesPerBandObserved": 24
+}

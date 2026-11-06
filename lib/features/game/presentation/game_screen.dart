@@ -52,10 +52,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      controller.effects.resume();
-      controller.refreshCalendar();
-    }
-    if (state != AppLifecycleState.resumed) {
+      if (controller.coordinator == null) controller.effects.resume();
+    } else {
       controller.suspendPresentation();
     }
   }
@@ -337,6 +335,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         controller: controller,
                         walletKey: _walletKey,
                         rewardSourceKey: _completionCoinSourceKey,
+                        onShowExtras: showExtras,
                       )
                     : MascotRoundLayout(
                         controller: controller,
@@ -1077,175 +1076,193 @@ class _Completion extends StatelessWidget {
     required this.controller,
     required this.walletKey,
     required this.rewardSourceKey,
+    required this.onShowExtras,
   });
   final GlobalKey walletKey, rewardSourceKey;
   final GameController controller;
+  final VoidCallback onShowExtras;
   @override
   Widget build(BuildContext context) {
-    final state = controller.completionState;
     final last = controller.isDaily || controller.lastLevel;
-    final saving = controller.completionSaving;
-    return LayoutBuilder(
-      builder: (context, constraints) => SingleChildScrollView(
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: constraints.maxHeight),
-          child: Center(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact =
+                  constraints.maxHeight < 620 ||
+                  MediaQuery.textScalerOf(context).scale(1) > 1.3;
+              return Column(
+                children: [
+                  if (controller.coordinator != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: WalletBadge(
+                        key: walletKey,
+                        balance: controller.balance,
+                        onPressed:
+                            controller.shopAvailable && controller.canAdvance
+                            ? () => openShop(context, controller)
+                            : null,
+                      ),
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: SizedBox(
+                          width: constraints.maxWidth,
+                          child: _buildSummary(
+                            context,
+                            compact: compact,
+                            last: last,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: VolumeButton(
+                      key: const ValueKey('next-level'),
+                      onPressed: controller.canAdvance
+                          ? controller.nextLevel
+                          : null,
+                      child: Text(
+                        last ? 'Voltar ao início' : 'Próximo nível',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummary(
+    BuildContext context, {
+    required bool compact,
+    required bool last,
+  }) {
+    final state = controller.completionState;
+    final saving = controller.completionSaving;
+    final spacing = compact ? 12.0 : 24.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween(
+            begin:
+                controller.freshVictory &&
+                    !MediaQuery.disableAnimationsOf(context)
+                ? .9
+                : 1,
+            end: 1,
+          ),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 350),
+          builder: (context, value, child) =>
+              Transform.scale(scale: value, child: child),
+          child: Container(
+            padding: EdgeInsets.all(compact ? 12 : 22),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF92C96F), Color(0xFF43975D)],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x225B9D5C),
+                  offset: Offset(0, 5),
+                  blurRadius: 12,
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.check_rounded,
+              size: compact ? 44 : 62,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        SizedBox(height: spacing),
+        Text(
+          controller.completionMessage,
+          key: const ValueKey('completion-message'),
+          style: Theme.of(context).textTheme.headlineMedium,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          controller.isDaily
+              ? 'Desafio diário concluído'
+              : 'Nível ${state.level.id} concluído.',
+          style: Theme.of(context).textTheme.titleMedium,
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: spacing),
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 10 : 22),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${state.targets.length} palavras obrigatórias\n${state.extras.length} ${state.extras.length == 1 ? 'palavra extra descoberta' : 'palavras extras descobertas'}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17, height: compact ? 1.3 : 1.7),
+          ),
+        ),
+        ExtraDiscoveriesSummary(
+          state: state,
+          compact: compact,
+          onShowExtras: onShowExtras,
+        ),
+        if (controller.coordinator != null) ...[
+          SizedBox(height: compact ? 8 : 16),
+          Text(
+            key: rewardSourceKey,
+            controller.newCompletion
+                ? '+${controller.completionReward} moedas!'
+                : 'Recompensa de ${controller.completionReward} moedas já recebida',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          Visibility(
+            visible: saving,
+            maintainState: true,
+            maintainAnimation: true,
+            maintainSize: true,
             child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Column(
+              padding: const EdgeInsets.only(top: 8),
+              child: Semantics(
+                liveRegion: saving,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (controller.coordinator != null) ...[
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: WalletBadge(
-                          key: walletKey,
-                          balance: controller.balance,
-                          onPressed:
-                              controller.shopAvailable && controller.canAdvance
-                              ? () => openShop(context, controller)
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    TweenAnimationBuilder<double>(
-                      tween: Tween(
-                        begin:
-                            controller.freshVictory &&
-                                !MediaQuery.disableAnimationsOf(context)
-                            ? .9
-                            : 1,
-                        end: 1,
-                      ),
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 350),
-                      builder: (context, value, child) =>
-                          Transform.scale(scale: value, child: child),
-                      child: Container(
-                        padding: const EdgeInsets.all(22),
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF92C96F), Color(0xFF43975D)],
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x225B9D5C),
-                              offset: Offset(0, 5),
-                              blurRadius: 12,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          size: 62,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      controller.completionMessage,
-                      key: const ValueKey('completion-message'),
-                      style: Theme.of(context).textTheme.headlineMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      controller.isDaily
-                          ? 'Desafio diário concluído'
-                          : 'Nível ${state.level.id} concluído.',
-                      style: Theme.of(context).textTheme.titleMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                    if (saving && !MediaQuery.disableAnimationsOf(context))
+                      const SizedBox.square(
+                        dimension: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      const Icon(Icons.sync_rounded, size: 14),
+                    const SizedBox(width: 8),
+                    Flexible(
                       child: Text(
-                        '${state.targets.length} palavras obrigatórias\n${state.extras.length} ${state.extras.length == 1 ? 'palavra extra descoberta' : 'palavras extras descobertas'}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 17, height: 1.7),
-                      ),
-                    ),
-                    ExtraDiscoveriesSummary(state: state),
-                    if (controller.coordinator != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        key: rewardSourceKey,
-                        controller.newCompletion
-                            ? '+${controller.completionReward} moedas!'
-                            : 'Recompensa de ${controller.completionReward} moedas já recebida',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Visibility(
-                        visible: saving,
-                        maintainState: true,
-                        maintainAnimation: true,
-                        maintainSize: true,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Semantics(
-                            liveRegion: saving,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (saving &&
-                                    !MediaQuery.disableAnimationsOf(context))
-                                  const SizedBox.square(
-                                    dimension: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                else
-                                  const Icon(Icons.sync_rounded, size: 14),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    'Salvando progresso…',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (!saving) SaveStatus(controller: controller),
-                    ],
-                    if (last && !controller.isDaily) ...[
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Você concluiu todos os níveis desta coleção.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      child: VolumeButton(
-                        key: const ValueKey('next-level'),
-                        onPressed: controller.canAdvance
-                            ? controller.nextLevel
-                            : null,
-                        child: Text(
-                          last ? 'Voltar ao início' : 'Próximo nível',
-                          textAlign: TextAlign.center,
-                        ),
+                        'Salvando progresso…',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                   ],
@@ -1253,8 +1270,16 @@ class _Completion extends StatelessWidget {
               ),
             ),
           ),
-        ),
-      ),
+          if (!saving) SaveStatus(controller: controller),
+        ],
+        if (last && !controller.isDaily) ...[
+          SizedBox(height: spacing),
+          const Text(
+            'Você concluiu todos os níveis desta coleção.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ],
     );
   }
 }

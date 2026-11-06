@@ -149,6 +149,82 @@ void main() {
   );
 
   test(
+    'MIRA and COTA are extras in every compatible v2 and v3 campaign level',
+    () async {
+      final version3 = await GameData.load(bundle: CatalogAssets(), version: 3);
+      for (final data in [production, version3]) {
+        final engine = data.createEngine();
+        for (final word in ['MIRA', 'COTA']) {
+          final levels = data.levels.where((level) => level.canForm(word));
+          expect(levels, isNotEmpty);
+          for (final level in levels) {
+            engine.startLevel(level.id);
+            expect(submitWord(engine, word).kind, SubmissionKind.extraFound);
+            expect(submitWord(engine, word).kind, SubmissionKind.extraRepeated);
+          }
+        }
+      }
+    },
+  );
+
+  for (final (extra, day, target) in [
+    ('MIRA', 6, 'RIMA'),
+    ('COTA', 7, 'TACO'),
+  ]) {
+    test(
+      'saved daily round gains $extra while preserving progress and tiles',
+      () async {
+        final dailyData = GameData.parse(
+          File('assets/data/daily_levels.json').readAsStringSync(),
+          lexiconText,
+        );
+        final repository = await SqliteProgressRepository.open(
+          factory: databaseFactoryFfi,
+          databasePath: inMemoryDatabasePath,
+        );
+        addTearDown(repository.close);
+        Future<GameSessionCoordinator> open(Map<String, WordEntry> lexicon) =>
+            GameSessionCoordinator.create(
+              production,
+              repository,
+              now: () => DateTime(2026, 1, day, 12),
+              dailyCatalog: DailyCatalog(
+                version: dailyData.catalogVersion,
+                baseDate: '2026-01-01',
+                levels: dailyData.levels,
+                lexicon: lexicon,
+              ),
+            );
+        final previous = await open({...dailyData.lexicon}..remove(extra));
+        await previous.startDaily();
+        expect(previous.engine.state.level.canForm(extra), isTrue);
+        expect(
+          submitWord(previous.engine, extra).kind,
+          SubmissionKind.unknownWord,
+        );
+        await previous.submitWord(
+          idsFor(previous.engine, target),
+          session: previous.engine.state.session,
+        );
+        final round = previous.activeRound!;
+
+        final current = await open(dailyData.lexicon);
+        await current.startDaily();
+        expect(current.activeRound!.toJson(), round.toJson());
+        expect(current.engine.state.targets, {target});
+        final result = await current.submitWord(
+          idsFor(current.engine, extra),
+          session: current.engine.state.session,
+        );
+        expect(result.kind, SubmissionKind.extraFound);
+        final saved = await repository.load(production);
+        expect(saved.daily[current.today]!.round.extras, [extra]);
+        expect(saved.balance, previous.profile.balance);
+      },
+    );
+  }
+
+  test(
     'seven revised daily definitions remain valid and distinct across cycles',
     () {
       final text = File('assets/data/daily_levels.json').readAsStringSync();

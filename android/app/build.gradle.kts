@@ -8,6 +8,7 @@ plugins {
 
 val uploadKeyPropertiesFile = rootProject.file("key.properties")
 val uploadKeyProperties = Properties()
+val catalogPreview = providers.gradleProperty("catalogPreview").orElse("false").get().toBoolean()
 if (uploadKeyPropertiesFile.isFile) {
     uploadKeyPropertiesFile.inputStream().use { uploadKeyProperties.load(it) }
 }
@@ -25,6 +26,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "br.com.conectepalavras.caca_palavra"
+        manifestPlaceholders["appLabel"] = if (catalogPreview) "Conecte palavras Beta" else "Conecte palavras"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -52,7 +54,13 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.findByName("release")
+            if (catalogPreview) {
+                applicationIdSuffix = ".catalogtest"
+            }
+            signingConfig = signingConfigs.findByName(if (catalogPreview) "debug" else "release")
+        }
+        debug {
+            if (catalogPreview) applicationIdSuffix = ".catalogtest"
         }
     }
 }

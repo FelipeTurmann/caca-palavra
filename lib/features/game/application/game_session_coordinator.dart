@@ -330,11 +330,7 @@ class GameSessionCoordinator {
           random: engine.randomSource,
         );
       } else {
-        engine = GameEngine(
-          levels: data.levels,
-          lexicon: data.lexicon,
-          random: engine.randomSource,
-        );
+        engine = data.createEngine(round: round, random: engine.randomSource);
       }
     }
     if (round != null) {
@@ -599,6 +595,7 @@ class GameSessionCoordinator {
     if (old?.completed == true && old?.pendingResult == false) {
       throw StateError('Desafio de hoje concluído.');
     }
+    DailyProgress? day;
     if (old == null) {
       final definition = dailyCatalog.forDate(date);
       if (online != null &&
@@ -612,13 +609,27 @@ class GameSessionCoordinator {
         lexicon: dailyCatalog.lexicon,
         random: engine.randomSource,
       );
-      final day = DailyProgress(
+      day = DailyProgress(
         date: date,
         catalogVersion: dailyCatalog.version,
         definition: definition,
         lexicon: dailyCatalog.lexicon,
         round: candidate.snapshot(operationId('daily:$date')),
       );
+    } else if (!old.completed &&
+        old.catalogVersion == dailyCatalog.version &&
+        old.definition.fingerprint == dailyCatalog.forDate(date).fingerprint) {
+      final additions = {
+        for (final entry in dailyCatalog.lexicon.entries)
+          if (!old.lexicon.containsKey(entry.key) &&
+              old.definition.canForm(entry.key))
+            entry.key: entry.value,
+      };
+      if (additions.isNotEmpty) {
+        day = old.copyWith(lexicon: {...old.lexicon, ...additions});
+      }
+    }
+    if (day != null) {
       await _save(
         SaveProposal(
           id: operationId('start-daily'),
@@ -762,7 +773,7 @@ class GameSessionCoordinator {
       .firstOrNull;
 
   WordEntry? clueWordFor(String key) {
-    if (mode != GameMode.daily) return data.lexicon[key];
+    if (mode != GameMode.daily) return engine.lexicon[key];
     final saved = activeDay?.lexicon[key];
     if (activeDay?.hasClueCatalog == true) return saved;
     final current = data.lexicon[key];

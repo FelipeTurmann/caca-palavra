@@ -185,6 +185,79 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('compact completion keeps the wallet and advance button fixed', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetPadding);
+
+    final game = await session(tester);
+    await game.startOrContinue();
+    Future<void> completeLevel({List<String> extras = const []}) async {
+      for (final key in [
+        ...extras,
+        ...game.engine.state.level.words.map((word) => word.key),
+      ]) {
+        await game.submitWord(
+          idsFor(game.engine, key),
+          session: game.engine.state.session,
+        );
+      }
+      expect(game.engine.finishCompletion(game.engine.state.session), isTrue);
+    }
+
+    await completeLevel();
+    final controller = GameController(game.engine, coordinator: game);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: GameScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final next = find.byKey(const ValueKey('next-level'));
+    final wallet = find.descendant(
+      of: find.byType(WalletBadge),
+      matching: find.byType(Icon),
+    );
+    expect(next.hitTestable(), findsOneWidget);
+    expect(find.byType(Scrollable), findsNothing);
+    final walletY = tester.getCenter(wallet).dy;
+    final nextBounds = tester.getRect(next);
+    expect(walletY, greaterThan(24));
+    expect(nextBounds.bottom, lessThan(568 - 24));
+
+    await tester.tap(next);
+    await tester.pumpAndSettle();
+    await completeLevel(extras: ['APTO', 'OPTA']);
+    controller.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('Nível 2 concluído.'), findsOneWidget);
+    expect(next.hitTestable(), findsOneWidget);
+    expect(find.byType(Scrollable), findsNothing);
+    expect(tester.getCenter(wallet).dy, closeTo(walletY, 0.01));
+    expect(tester.getRect(next), nextBounds);
+
+    await tester.tap(find.text('Ver palavras extras'));
+    await tester.pumpAndSettle();
+    expect(find.text('Palavras extras'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('OPTA'), 80);
+    expect(find.text('OPTA').hitTestable(), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('APTO'), 80);
+    expect(find.text('APTO').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('new Explorer badge shows +10 coins and updates wallet once', (
     tester,
   ) async {

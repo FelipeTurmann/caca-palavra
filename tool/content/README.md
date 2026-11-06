@@ -1,4 +1,31 @@
-# Autoria do catálogo 2
+# Autoria dos catálogos
+
+## Campanha 3 e APK Beta
+
+Os 2.500 níveis e o léxico da nova campanha ficam em `catalog-v3/`. O app online
+carrega a versão informada pela API. Rodadas salvas com a versão anterior
+continuam com suas fichas, respostas e regras do Explorador.
+
+```powershell
+git clone --no-checkout https://github.com/LuceleneL/PortiLexicon-UD.git build/portilexicon-ud
+curl.exe -fsSL https://raw.githubusercontent.com/LibreOffice/dictionaries/4f1df64b2e8e14751aa7c2205d170ca016071315/pt_BR/pt_BR.dic -o build/vero-pt_BR.dic
+node tool/content/generate_levels.mjs --v3 build/portilexicon-ud tool/content/catalog-v3 build/vero-pt_BR.dic
+dart tool/validate_catalog.dart --levels tool/content/catalog-v3/levels.json --lexicon tool/content/catalog-v3/lexicon_pt_br.json --report build/catalog-v3-validation.json
+flutter build apk --release -t lib/main_catalog_preview.dart --android-project-arg=catalogPreview=true
+```
+
+O APK **Conecte palavras Beta** tem um identificador Android separado e usa
+progresso local. Ele permite testar a campanha 3 enquanto o ambiente online usa
+a versão 2.
+
+- O gerador lê os dados do PortiLexicon-UD em uma revisão fixa diretamente do Git. A revisão, a atribuição e a finalidade constam no léxico gerado. O arquivo de licença do repositório acompanha a saída. O portal de dados indica a licença [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- As respostas partem da lista editorial com dicas próprias. São elegíveis substantivos e adjetivos com uso no singular e verbos no infinitivo. Uma forma verbal também pode entrar pelo uso independente revisado, como o adjetivo **ABERTO**.
+- `clues_v3.tsv` contém as revisões que se aplicam apenas à campanha 3. O gerador registra a versão de cada frase revisada.
+- O Explorador aceita as formas registradas de 3 a 6 letras que podem ser montadas em alguma rodada da campanha ou do diário usado na validação. As fichas ignoram acentos. Em colisões, a forma editorial tem prioridade e cada sequência vale uma descoberta.
+- As entradas adicionais da referência fserb precisam corresponder a uma entrada minúscula do dicionário VERO. O gerador confere o SHA-256 da revisão de referência.
+- A mesma resposta precisa ficar fora dos cinco níveis seguintes. Cada resposta tem teto de 45 usos na campanha e de 25 na mesma faixa de dificuldade. O relatório registra os limites observados.
+
+## Campanha 2
 
 `vocabulary.tsv` é a seleção explícita do projeto, com grafia, classe gramatical, familiaridade e frase própria. Entradas adicionais do protótipo são lidas da fixture `test/fixtures/lexicon_v1.json`, com revisão explícita das conjugações excluídas. `rejected.json` documenta as exclusões. Nenhuma palavra é admitida apenas por constar no corpus de referência.
 

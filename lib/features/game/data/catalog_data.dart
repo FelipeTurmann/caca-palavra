@@ -68,13 +68,18 @@ class CatalogData {
           lexiconRoot['schemaVersion'] != 1) {
         throw const FormatException('Versão dos dados não suportada.');
       }
+      final campaignExplorer =
+          lexiconRoot['editorialPolicy'] == 'pt-br-campaign-explorer-v3';
       for (final raw in lexiconRoot['words'] as List) {
         try {
           final word = _word(
             raw,
             clueVersion: lexiconRoot['clueVersion'] as int? ?? 1,
           );
-          if (lexiconRoot['clueVersion'] != null) {
+          if (lexiconRoot['clueVersion'] != null &&
+              (!campaignExplorer ||
+                  raw['targetEligible'] != false ||
+                  word.clue != null)) {
             final clue = word.clue;
             if (clue == null ||
                 clue.trim().isEmpty ||
@@ -115,7 +120,8 @@ class CatalogData {
                   ].contains(raw['partOfSpeech']) ||
                   ![1, 2, 3].contains(raw['familiarity']) ||
                   raw['source'] is! String ||
-                  raw['referenceLemma'] is! String)) {
+                  raw['referenceLemma'] is! String ||
+                  (campaignExplorer && raw['targetEligible'] is! bool))) {
             issues.add(
               CatalogIssue(
                 lexiconFile,
@@ -291,6 +297,7 @@ class CatalogData {
     }
     final availableExtras = lexicon.keys
         .where((key) => !seen.contains(key) && level.canForm(key))
+        .take(level.extraGoal > 0 ? level.extraGoal : 1)
         .length;
     if (level.extraGoal < 1 || level.extraGoal > availableExtras) {
       invalid(
@@ -330,8 +337,8 @@ class CatalogData {
     String file = 'levels.json',
   }) {
     final issues = <CatalogIssue>[];
-    void invalid(String rule, String detail, {int? level}) =>
-        issues.add(CatalogIssue(file, rule, detail, level: level));
+    void invalid(String rule, String detail, {int? level, String? word}) =>
+        issues.add(CatalogIssue(file, rule, detail, level: level, word: word));
     final policy = root['policy'] as Map;
     if (policy['expectedLevelCount'] != 2500 || levels.length != 2500) {
       invalid('count', 'Esperados exatamente 2500 níveis.');
@@ -346,17 +353,48 @@ class CatalogData {
         'Exigir distância mínima 100, descanso a cada 5 e pontuação versão 1.',
       );
     }
+    final version3 = root['catalogVersion'] == 3;
+    final minimumTargetDistance = policy['minimumTargetDistance'];
+    final maxTargetUses = policy['maxTargetUses'];
+    final maxTargetUsesPerBand = policy['maxTargetUsesPerBand'];
+    if (version3 &&
+        (lexiconRoot['editorialPolicy'] != 'pt-br-campaign-explorer-v3' ||
+            minimumTargetDistance is! int ||
+            minimumTargetDistance < 6 ||
+            maxTargetUses is! int ||
+            maxTargetUses < 1 ||
+            maxTargetUses > 45 ||
+            maxTargetUsesPerBand is! int ||
+            maxTargetUsesPerBand < 1 ||
+            maxTargetUsesPerBand > 25)) {
+      invalid(
+        'target_policy',
+        'Política de respostas da campanha v3 inválida.',
+      );
+    }
     final familiarity = <String, int>{};
+    final targetKeys = <String>{};
     for (final raw in lexiconRoot['words'] as List) {
       try {
-        familiarity[WordNormalizer.normalize(raw['display'] as String)] =
-            raw['familiarity'] as int? ?? 1;
+        final key = WordNormalizer.normalize(raw['display'] as String);
+        familiarity[key] = raw['familiarity'] as int? ?? 1;
+        if (raw['targetEligible'] == true &&
+            [
+              'substantivo',
+              'adjetivo',
+              'verbo_infinitivo',
+            ].contains(raw['partOfSpeech'])) {
+          targetKeys.add(key);
+        }
       } catch (_) {
         /* Reported by lexical checks. */
       }
     }
     final lastRack = <String, int>{};
     final identities = <String>{};
+    final lastTarget = <String, int>{};
+    final targetUses = <String, int>{};
+    final targetBandUses = <(int, String), int>{};
     final rawLevels = root['levels'] as List;
     final scores = <int>[];
     for (var i = 0; i < levels.length; i++) {
@@ -467,6 +505,51 @@ class CatalogData {
           'Respostas devem ser comuns; introdução somente com familiaridade 1.',
           level: l.id,
         );
+      }
+      if (version3) {
+        for (final word in l.words) {
+          final key = word.key;
+          if (!targetKeys.contains(key)) {
+            invalid(
+              'extra_only',
+              'Palavra reservada ao Explorador.',
+              level: l.id,
+              word: word.display,
+            );
+          }
+          final previous = lastTarget[key];
+          if (previous != null &&
+              minimumTargetDistance is int &&
+              l.id - previous < minimumTargetDistance) {
+            invalid(
+              'target_distance',
+              'Resposta repetida antes do intervalo mínimo.',
+              level: l.id,
+              word: word.display,
+            );
+          }
+          lastTarget[key] = l.id;
+          final count = targetUses.update(
+            key,
+            (uses) => uses + 1,
+            ifAbsent: () => 1,
+          );
+          final bandCount = targetBandUses.update(
+            (band, key),
+            (uses) => uses + 1,
+            ifAbsent: () => 1,
+          );
+          if ((maxTargetUses is int && count > maxTargetUses) ||
+              (maxTargetUsesPerBand is int &&
+                  bandCount > maxTargetUsesPerBand)) {
+            invalid(
+              'target_frequency',
+              'Resposta excede o limite de aparições.',
+              level: l.id,
+              word: word.display,
+            );
+          }
+        }
       }
     }
     return issues;

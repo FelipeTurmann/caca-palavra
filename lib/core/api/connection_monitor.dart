@@ -38,6 +38,7 @@ class ConnectionMonitor extends ChangeNotifier {
   bool checking = false;
   bool _disposed = false;
   int _networkRevision = 0;
+  int _failureRevision = 0;
   StreamSubscription<bool?>? _subscription;
   Future<void>? _starting;
   bool get blocked => problem != null;
@@ -63,6 +64,7 @@ class ConnectionMonitor extends ChangeNotifier {
   void _networkChanged(bool? available) {
     if (_disposed) return;
     _networkRevision++;
+    if (available == false && internetAvailable != false) _failureRevision++;
     internetAvailable = available;
     if (available == false) {
       problem = ConnectionProblem.offline;
@@ -75,6 +77,7 @@ class ConnectionMonitor extends ChangeNotifier {
 
   void reportServiceFailure() {
     if (_disposed) return;
+    _failureRevision++;
     problem = internetAvailable == false
         ? ConnectionProblem.offline
         : ConnectionProblem.serviceUnavailable;
@@ -88,9 +91,12 @@ class ConnectionMonitor extends ChangeNotifier {
     try {
       await start();
       await refreshNetwork();
-      if (internetAvailable == false) return;
+      if (_disposed || internetAvailable == false) return;
+      final revision = _failureRevision;
       final verified = await verifyServices();
-      if (!_disposed && verified && internetAvailable != false) problem = null;
+      if (!_disposed && verified && revision == _failureRevision) {
+        problem = null;
+      }
     } finally {
       checking = false;
       if (!_disposed) notifyListeners();

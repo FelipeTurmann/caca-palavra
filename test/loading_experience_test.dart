@@ -129,6 +129,9 @@ void main() {
         expect(message, findsOneWidget);
         expect(coins, findsOneWidget);
         expect(tester.widget<VolumeButton>(next).onPressed, isNull);
+        final wallet = find.byType(WalletBadge);
+        final walletTop = tester.getTopRight(wallet);
+        final nextBounds = tester.getRect(next);
         expect(
           controller.completionState.targets,
           words.map((word) => word.key).toSet(),
@@ -151,6 +154,8 @@ void main() {
           expect(tester.widget<Text>(message).data, phrase);
           expect(tester.widget<VolumeButton>(next).onPressed, isNull);
           expect(find.text('Tentar novamente'), findsOneWidget);
+          expect(tester.getTopRight(wallet), walletTop);
+          expect(tester.getRect(next), nextBounds);
           expect(game.profile.completed, isEmpty);
           repository.failCompletion = false;
           repository.completionGate = Completer<void>();
@@ -163,6 +168,8 @@ void main() {
         }
         expect(tester.widget<Text>(message).data, phrase);
         expect(tester.widget<VolumeButton>(next).onPressed, isNotNull);
+        expect(tester.getTopRight(wallet), walletTop);
+        expect(tester.getRect(next), nextBounds);
         expect(coins, findsNothing);
         expect(repository.completionCommits, 1);
         expect(game.profile.completed, {1});

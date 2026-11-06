@@ -10,9 +10,10 @@ class ConnectionNotice extends StatelessWidget {
     required this.offline,
     required this.checking,
     required this.onRetry,
+    this.autoRetry = false,
   });
 
-  final bool offline, checking;
+  final bool offline, checking, autoRetry;
   final VoidCallback onRetry;
 
   @override
@@ -52,9 +53,11 @@ class ConnectionNotice extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      offline
-                          ? 'Você precisa de acesso à internet para jogar. Verifique sua conexão e tente novamente.'
-                          : 'O serviço pode estar indisponível. Tente novamente em instantes.',
+                      autoRetry
+                          ? offline
+                                ? 'Quando a internet voltar, o jogo vai tentar reconectar automaticamente.'
+                                : 'O jogo vai tentar reconectar automaticamente em instantes.'
+                          : 'Verifique sua conexão e tente novamente.',
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
@@ -115,6 +118,7 @@ class ConnectionGate extends StatelessWidget {
               offline: connection.problem == ConnectionProblem.offline,
               checking: connection.checking,
               onRetry: onRetry,
+              autoRetry: true,
             ),
           ),
       ],
